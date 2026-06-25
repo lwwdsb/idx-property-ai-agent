@@ -3,8 +3,8 @@
 A production-style multi-agent AI assistant for real estate, built on the
 [OpenClaw](https://github.com/openclaw/openclaw) runtime. The assistant performs
 natural-language MLS property search, market analytics, semantic recommendations,
-RAG-based knowledge retrieval, and WhatsApp + email communication over 667K+
-California MLS records.
+RAG-based knowledge retrieval, and WhatsApp + email communication over the
+curated California MLS working tables (~140K records).
 
 > **AI Agentic Engineer Internship — IDX Exchange · Summer 2026 · 12 Weeks**
 
@@ -28,16 +28,23 @@ User → WhatsApp → OpenClaw Runtime → Orchestrator → [specialized agents]
 
 Two MySQL tables in a local schema (`idx_exchange`):
 
+Three MySQL tables imported into a local schema (`idx_exchange`). Counts below are
+the actual curated working tables from the internship FTP `sql/` folder:
+
 | Table | Rows | Role |
 |---|---|---|
-| `rets_property` | ~228K active listings, 130+ fields | Live search & discovery |
-| `california_sold` | ~439K sold transactions, 46 fields | Historical comps & analytics |
+| `rets_property` | 53,122 active listings (CA), 130+ cryptic `L_*` fields | Live search & discovery |
+| `california_sold` | 87,157 sold transactions (CA), 46 fields | Historical comps & analytics |
+| `rets_openhouse` | 4,282 open-house events | Open-house lookups (NLP track) |
 
 **Join pattern:** `CAST(rets_property.L_ListingID AS UNSIGNED) = california_sold.ListingKey`,
 or match on city + postal code for market-level analysis.
 
 > The MLS data is confidential and is **not** committed to this repository
-> (see `.gitignore`). Dumps are imported into a local MySQL instance only.
+> (see `.gitignore`). Dumps are downloaded from the internship FTP (see Slack) and
+> imported into a local MySQL instance only. A larger raw monthly export
+> (`CRMLSListing*` / `CRMLSSold*`, the source behind the marketed "667K+") also
+> exists on the FTP but the project uses the curated tables above.
 
 ---
 
@@ -45,9 +52,15 @@ or match on city + postal code for market-level analysis.
 
 ```
 idx-property-ai-agent/
-├── skills/        # Custom OpenClaw skills (one folder per capability)
-├── src/           # Query layers, embedding pipelines, agent logic (TS/Python)
-├── docs/          # Architecture diagram, schema annotations, design notes
+├── scripts/       # Data-layer tooling
+│   ├── import.sh      # Idempotent import of the three SQL tables
+│   └── check_env.py   # Validates .env + DB connectivity + OpenAI key
+├── schema/        # SQL DDL (committed; this is code, not data)
+│   └── indexes.sql    # High-frequency filter indexes
+├── Makefile       # make import | indexes | check | rebuild | db-up | db-down
+├── skills/        # Custom OpenClaw skills (one folder per capability) — Week 1+
+├── src/           # Query layers, embedding pipelines, agent logic (TS/Python) — Week 1+
+├── docs/          # Architecture diagram, schema annotations, design notes — Week 1+
 ├── .env.example   # Template for required environment variables (no real keys)
 └── README.md
 ```
@@ -67,34 +80,31 @@ is installed separately and is not part of this repo.
 - OpenClaw installed (`npm install -g openclaw`, then `openclaw onboard`)
 - An OpenAI API key with available billing credit
 
-### 1. Clone & install
+### 1. Clone
 ```bash
-git clone https://github.com/CSUSC-CChen/idx-property-ai-agent.git
+git clone https://github.com/lwwdsb/idx-property-ai-agent.git
 cd idx-property-ai-agent
-npm install                # if/when package.json is added
 ```
 
-### 2. Python environment
-```bash
-python3 -m venv venv
-source venv/bin/activate
-pip install pandas openai mysql-connector-python sqlalchemy scikit-learn numpy
-```
-
-### 3. Import the MLS data
-```bash
-mysql -u root -p -e "CREATE DATABASE idx_exchange CHARACTER SET utf8mb4;"
-mysql -u root -p idx_exchange < rets_property.sql      # ~228K rows; FULLTEXT index takes time
-mysql -u root -p idx_exchange < california_sold.sql    # ~439K rows
-```
-
-### 4. Configure environment
+### 2. Configure environment
 Copy `.env.example` to `.env` and fill in your values. **Never commit `.env`.**
 ```bash
-cp .env.example .env
+cp .env.example .env   # then set DB_PASSWORD, and OPENAI_API_KEY before Week 6
 ```
 
-### 5. Connect WhatsApp
+### 3. Get the data & import
+Download `rets_property.sql`, `california_sold.sql`, `rets_openhouse.sql` from the
+internship FTP (credentials are in the Slack channel) into the repo root, then:
+```bash
+make db-up      # start MySQL (Homebrew)
+make import     # idempotent import of all three tables into idx_exchange
+make indexes    # add high-frequency filter indexes
+make check      # validate env + DB row counts + OpenAI key
+```
+> The MariaDB dumps use zero-date defaults that MySQL 8/9 rejects by default;
+> `import.sh` runs each load with `SET sql_mode=''` to handle this.
+
+### 4. Connect WhatsApp (Week 1, with the OpenClaw skeleton)
 ```bash
 openclaw channels login --channel whatsapp
 # Scan the QR via WhatsApp → Settings → Linked Devices
@@ -104,16 +114,18 @@ openclaw channels login --channel whatsapp
 
 ## Environment Variables
 
-See `.env.example`. Required keys:
+See `.env.example`. Keys:
 
 ```
-OPENAI_API_KEY=
-MYSQL_HOST=localhost
-MYSQL_USER=idx_user
-MYSQL_PASSWORD=
-MYSQL_DATABASE=idx_exchange
-EMAIL_USER=
-EMAIL_PASSWORD=
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_USER=root
+DB_PASSWORD=
+DB_NAME=idx_exchange
+OPENAI_API_KEY=            # not needed until Week 6 (embeddings)
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+OPENAI_CHAT_MODEL=gpt-4o-mini
+WHATSAPP_SESSION_NAME=idx-assistant
 ```
 
 ---
@@ -122,7 +134,7 @@ EMAIL_PASSWORD=
 
 | Week | Module | Status |
 |------|--------|--------|
-| 0 | Environment setup, MySQL import, WhatsApp config | ⬜ |
+| 0 | Environment setup, MySQL import, indexes, env validation | ✅ |
 | 1 | OpenClaw architecture: skills, sessions, tools, memory | ⬜ |
 | 2 | NL property search (query → structured filters) | ⬜ |
 | 3 | MySQL integration: parameterized queries, pagination | ⬜ |

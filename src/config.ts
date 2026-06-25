@@ -1,0 +1,64 @@
+/**
+ * Config loader + fail-fast validation.
+ * Loads .env, validates required keys at startup, and exposes a typed config.
+ * Missing required config throws immediately so the app never starts half-configured.
+ * (TS mirror of the Week 0 scripts/check_env.py philosophy, for the live path.)
+ */
+import 'dotenv/config';
+
+function required(name: string): string {
+  const v = process.env[name];
+  if (!v || v.trim() === '') {
+    throw new Error(`Missing required env var: ${name} (copy .env.example -> .env)`);
+  }
+  return v.trim();
+}
+
+function optional(name: string, fallback = ''): string {
+  return (process.env[name] ?? fallback).trim();
+}
+
+export interface Config {
+  db: {
+    host: string;
+    port: number;
+    user: string;
+    password: string;
+    database: string;
+  };
+  openai: {
+    /** May be empty until Week 6 (embeddings). Guard before use. */
+    apiKey: string;
+    embeddingModel: string;
+    chatModel: string;
+  };
+  whatsapp: {
+    sessionName: string;
+  };
+}
+
+export const config: Config = {
+  db: {
+    host: required('DB_HOST'),
+    port: Number(required('DB_PORT')),
+    user: required('DB_USER'),
+    password: required('DB_PASSWORD'),
+    database: required('DB_NAME'),
+  },
+  openai: {
+    apiKey: optional('OPENAI_API_KEY'),
+    embeddingModel: optional('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small'),
+    chatModel: optional('OPENAI_CHAT_MODEL', 'gpt-4o-mini'),
+  },
+  whatsapp: {
+    sessionName: optional('WHATSAPP_SESSION_NAME', 'idx-assistant'),
+  },
+};
+
+/** Throws if a feature's config is missing. Call before using OpenAI (Week 6+). */
+export function requireOpenAI(): string {
+  if (!config.openai.apiKey) {
+    throw new Error('OPENAI_API_KEY is not set — required for embeddings/chat (Week 6+).');
+  }
+  return config.openai.apiKey;
+}

@@ -13,15 +13,25 @@ openclaw.json
 # ─────────────────────────────────────────────────────────────
 # Confidential IDX data
 # ─────────────────────────────────────────────────────────────
+# NOTE: .gitignore does NOT support trailing/inline comments — keep comments on their own line.
 *.sql
 *.csv
 *.tsv
 *.dump
+# confidential handbook / docs — never commit
+*.pdf
 data/
 exports/
-embeddings/          # cached vector files can be large + derived from MLS data
+# cached vector files can be large + derived from MLS data
+embeddings/
 # Exception: schema DDL (index/table definitions) is code, not data — keep it.
 !schema/*.sql
+
+# ─────────────────────────────────────────────────────────────
+# Local-only dirs (not part of the project)
+# ─────────────────────────────────────────────────────────────
+.claude/
+slack-mcp-plugin/
 
 # ─────────────────────────────────────────────────────────────
 # Node.js

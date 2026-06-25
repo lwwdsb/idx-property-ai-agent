@@ -6,6 +6,7 @@
   "description": "Multi-agent real-estate assistant on OpenClaw (live path: TypeScript).",
   "scripts": {
     "smoke": "tsx src/smoke.ts",
+    "test": "tsx src/search/parseQuery.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

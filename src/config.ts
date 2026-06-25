@@ -32,6 +32,17 @@ export interface Config {
     embeddingModel: string;
     chatModel: string;
   };
+  /**
+   * Provider-agnostic chat LLM (OpenAI-compatible /chat/completions).
+   * Swap provider by changing baseUrl + apiKey + model in .env — e.g. point at
+   * MiniMax or OpenAI without touching code. Empty apiKey => LLM path disabled
+   * (callers fall back to the regex fast-path).
+   */
+  llm: {
+    baseUrl: string;
+    apiKey: string;
+    model: string;
+  };
   whatsapp: {
     sessionName: string;
   };
@@ -49,6 +60,11 @@ export const config: Config = {
     apiKey: optional('OPENAI_API_KEY'),
     embeddingModel: optional('OPENAI_EMBEDDING_MODEL', 'text-embedding-3-small'),
     chatModel: optional('OPENAI_CHAT_MODEL', 'gpt-4o-mini'),
+  },
+  llm: {
+    baseUrl: optional('LLM_BASE_URL', 'https://api.openai.com/v1'),
+    apiKey: optional('LLM_API_KEY') || optional('OPENAI_API_KEY'),
+    model: optional('LLM_MODEL', 'gpt-4o-mini'),
   },
   whatsapp: {
     sessionName: optional('WHATSAPP_SESSION_NAME', 'idx-assistant'),

@@ -34,6 +34,16 @@ embeddings/
 slack-mcp-plugin/
 
 # ─────────────────────────────────────────────────────────────
+# WhatsApp / OpenClaw session + auth state (login credentials — never commit)
+# ─────────────────────────────────────────────────────────────
+.wwebjs_auth/
+.wwebjs_cache/
+.openclaw/
+.openclaw-*/
+*-auth/
+session/
+
+# ─────────────────────────────────────────────────────────────
 # Node.js
 # ─────────────────────────────────────────────────────────────
 node_modules/

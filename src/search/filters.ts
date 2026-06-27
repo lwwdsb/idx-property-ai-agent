@@ -16,10 +16,12 @@ export interface SearchFilter {
   propertyType?: string;
   pool?: boolean;
   minSqft?: number;
+  /** Free-text remark search via FULLTEXT (e.g. "ocean view", "remodeled kitchen"). */
+  keywords?: string;
 }
 
 export const FILTER_KEYS: ReadonlyArray<keyof SearchFilter> = [
-  'city', 'beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft',
+  'city', 'beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft', 'keywords',
 ];
 
 /**
@@ -65,6 +67,7 @@ export function summarizeFilter(f: SearchFilter): string {
   if (f.minPrice !== undefined) parts.push(`≥$${fmtPrice(f.minPrice)}`);
   if (f.maxPrice !== undefined) parts.push(`≤$${fmtPrice(f.maxPrice)}`);
   if (f.pool) parts.push('pool');
+  if (f.keywords) parts.push(`"${f.keywords}"`);
   return parts.length ? parts.join(' · ') : '(no filters)';
 }
 

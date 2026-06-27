@@ -8,6 +8,7 @@
     "smoke": "tsx src/smoke.ts",
     "search": "tsx src/cli/search.ts",
     "test": "tsx src/search/parseQuery.test.ts",
+    "eval": "tsx src/search/eval.ts",
     "test:db": "tsx src/search/searchListings.test.ts",
     "typecheck": "tsc --noEmit"
   },

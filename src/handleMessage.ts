@@ -1,10 +1,10 @@
 /**
- * Minimal message router (handbook Week 1 example shape).
- * This is a placeholder spine: Week 9 replaces the keyword check with the
- * orchestrator (LLM intent + params in one call, confidence-gated clarification).
- * Kept here so the skeleton runs end-to-end before any LLM/agent exists.
+ * Message router. Routes a user message to the right handler. Week 9 replaces this
+ * with the full orchestrator; for now: "time" -> getCurrentTime, else -> the
+ * multi-turn search agent (Week 4).
  */
 import { getCurrentTime } from './tools/getCurrentTime.js';
+import { handleSearchTurn } from './agent/conversation.js';
 import { logger } from './logger.js';
 
 export interface MessageResult {
@@ -12,10 +12,11 @@ export interface MessageResult {
   data?: unknown;
 }
 
-export async function handleMessage(message: string): Promise<MessageResult> {
-  logger.info('handleMessage', { message });
-  if (message.toLowerCase().includes('time')) {
+export async function handleMessage(message: string, userId = 'default'): Promise<MessageResult> {
+  logger.info('handleMessage', { userId, message });
+  if (/\btime\b/i.test(message)) {
     return { data: await getCurrentTime() };
   }
-  return { response: 'I could not understand the request.' };
+  const turn = await handleSearchTurn(userId, message);
+  return { response: turn.reply, data: { kind: turn.kind, filter: turn.filter } };
 }

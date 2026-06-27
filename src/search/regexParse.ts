@@ -25,8 +25,8 @@ export function parseMoney(raw: string): number | undefined {
 
 const TYPE_PATTERNS: Array<[RegExp, string]> = [
   [/\b(?:single[\s-]?family|sfr|detached)\b|独栋|单户/i, 'single-family'],
-  [/\b(?:town\s?house|town\s?home|townhome)\b|联排/i, 'townhouse'],
-  [/\b(?:condo(?:minium)?|apartment|apt)\b|公寓/i, 'condo'],
+  [/\b(?:town\s?houses?|town\s?homes?)\b|联排/i, 'townhouse'],
+  [/\b(?:condos?|condominiums?|apartments?|apts?)\b|公寓/i, 'condo'],
 ];
 
 const CITY_STOPWORDS = new Set(['find', 'with', 'under', 'over', 'for', 'near', 'and', 'homes', 'home', 'house', 'houses', 'condo', 'condos']);

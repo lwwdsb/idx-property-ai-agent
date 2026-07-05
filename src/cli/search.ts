@@ -11,6 +11,7 @@ import { parseQuery } from '../search/parseQuery.js';
 import { searchActiveListings, searchSignal, getSoldComps } from '../search/searchListings.js';
 import { formatListingCard } from '../search/listingRow.js';
 import { summarizeFilter } from '../search/filters.js';
+import { getMarketStats, formatMarketStats } from '../market/marketStats.js';
 import { closePool } from '../db.js';
 
 function median(nums: number[]): number {
@@ -49,7 +50,9 @@ async function showSearch(query: string) {
 
 async function main() {
   const args = process.argv.slice(2);
-  if (args[0] === '--comps') {
+  if (args[0] === '--market') {
+    console.log('\n' + formatMarketStats(await getMarketStats(args.slice(1).join(' ') || 'Irvine', 12)));
+  } else if (args[0] === '--comps') {
     await showComps(args.slice(1).join(' ') || 'San Diego');
   } else if (args.length) {
     await showSearch(args.join(' '));

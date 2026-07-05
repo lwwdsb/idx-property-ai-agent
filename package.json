@@ -11,6 +11,7 @@
     "eval": "tsx src/search/eval.ts",
     "test:db": "tsx src/search/searchListings.test.ts",
     "test:agent": "tsx src/agent/conversation.test.ts",
+    "test:market": "tsx src/market/marketStats.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

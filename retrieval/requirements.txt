@@ -1,0 +1,5 @@
+# Hybrid retrieval subsystem (Week 6). Install into a venv:
+#   python3 -m venv .venv && source .venv/bin/activate && pip install -r retrieval/requirements.txt
+qdrant-client>=1.12
+fastembed>=0.3
+pymysql>=1.1

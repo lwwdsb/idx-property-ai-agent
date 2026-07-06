@@ -8,6 +8,7 @@ as filtered ANN inside Qdrant ("先筛" during HNSW traversal).
 import os
 from functools import lru_cache
 
+import pymysql
 from qdrant_client import QdrantClient, models
 from fastembed import TextEmbedding, SparseTextEmbedding
 
@@ -35,6 +36,14 @@ def get_qdrant():
     env = load_env()
     url = env.get("QDRANT_URL", "http://localhost:6333")
     return QdrantClient(url=url)
+
+
+def get_mysql():
+    env = load_env()
+    return pymysql.connect(
+        host=env.get("DB_HOST", "127.0.0.1"), port=int(env.get("DB_PORT", 3306)),
+        user=env.get("DB_USER", "root"), password=env.get("DB_PASSWORD", ""),
+        database=env.get("DB_NAME", "idx_exchange"), cursorclass=pymysql.cursors.DictCursor)
 
 
 @lru_cache(maxsize=1)

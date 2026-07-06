@@ -17,31 +17,34 @@ def llm_available() -> bool:
     return bool(env.get("LLM_API_KEY", "").strip())
 
 
-def explain_verdict(context: dict) -> str | None:
-    """context: listing summary + comp stats + deterministic verdict.
-    Returns a short reasoned explanation, or None if no LLM configured / on error."""
+def chat(prompt: str, system: str | None = None, temperature: float = 0.2) -> str | None:
+    """Generic OpenAI-compatible chat call. Returns None if no key / on error (乙)."""
     env = load_env()
     key = env.get("LLM_API_KEY", "").strip()
     if not key:
-        return None  # reserved slot — deterministic verdict stands on its own
+        return None
     base = env.get("LLM_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     model = env.get("LLM_MODEL", "gpt-4o-mini")
-    prompt = (
+    messages = ([{"role": "system", "content": system}] if system else []) + \
+               [{"role": "user", "content": prompt}]
+    body = json.dumps({"model": model, "temperature": temperature, "messages": messages}).encode()
+    req = urllib.request.Request(f"{base}/chat/completions", data=body,
+                                 headers={"Content-Type": "application/json",
+                                          "Authorization": f"Bearer {key}"})
+    try:
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return json.loads(r.read())["choices"][0]["message"]["content"].strip()
+    except Exception:
+        return None
+
+
+def explain_verdict(context: dict) -> str | None:
+    """context: listing summary + comp stats + deterministic verdict.
+    Returns a short reasoned explanation, or None if no LLM configured / on error.
+    The deterministic verdict is the safety floor; this only adds nuance on top."""
+    return chat(
         "You are a real-estate pricing reviewer. Given a listing and recent comparable "
         "sales, in ONE or TWO sentences explain whether the asking price looks justified. "
         "Ground every claim in the numbers provided; do not invent facts.\n\n"
         + json.dumps(context, ensure_ascii=False)
     )
-    body = json.dumps({
-        "model": model, "temperature": 0.2,
-        "messages": [{"role": "user", "content": prompt}],
-    }).encode()
-    req = urllib.request.Request(f"{base}/chat/completions", data=body,
-                                 headers={"Content-Type": "application/json",
-                                          "Authorization": f"Bearer {key}"})
-    try:
-        with urllib.request.urlopen(req, timeout=20) as r:
-            data = json.loads(r.read())
-        return data["choices"][0]["message"]["content"].strip()
-    except Exception:
-        return None  # 乙: reasoning failure must not break the verdict

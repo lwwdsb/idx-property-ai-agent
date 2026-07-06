@@ -4,7 +4,7 @@
  * single source of truth (schema/columns.ts). Run: npm run gen:glossary
  */
 import { writeFileSync, mkdirSync } from 'node:fs';
-import { FIELDS, type TableName } from '../../schema/columns.js';
+import { FIELDS, type TableName, type FieldDef } from '../../schema/columns.js';
 
 const TABLES: TableName[] = ['rets_property', 'california_sold', 'rets_openhouse'];
 
@@ -16,7 +16,8 @@ function main() {
     'maps to physical column names per table.',
     '',
   ];
-  for (const [name, def] of Object.entries(FIELDS)) {
+  for (const [name, rawDef] of Object.entries(FIELDS)) {
+    const def: FieldDef = rawDef;
     const cols = TABLES
       .filter((t) => def.columns[t])
       .map((t) => `${t}.${def.columns[t]}`)

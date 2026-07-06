@@ -162,6 +162,14 @@ def format_reco(result: dict) -> str:
 
 
 if __name__ == "__main__":
+    import json
     import sys
-    lid = int(sys.argv[1]) if len(sys.argv) > 1 else 0
-    print(format_reco(recommend(lid)))
+    if len(sys.argv) > 1 and sys.argv[1] == "--validate":
+        # --validate <city> <sqft> <price>  (comp price check only; MySQL, no Qdrant)
+        city = sys.argv[2] if len(sys.argv) > 2 else None
+        sqft = float(sys.argv[3]) if len(sys.argv) > 3 and sys.argv[3] else None
+        price = float(sys.argv[4]) if len(sys.argv) > 4 and sys.argv[4] else None
+        print(json.dumps(validate_price({"city": city, "sqft": sqft, "price": price})))
+    else:
+        lid = int(sys.argv[1]) if len(sys.argv) > 1 else 0
+        print(format_reco(recommend(lid)))

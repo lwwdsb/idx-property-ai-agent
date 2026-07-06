@@ -38,6 +38,9 @@ function extractCity(q: string): string | undefined {
   // 中文: "在 <Latin city> ..." (CA city names are latin even in zh queries)
   m = q.match(/在\s*([A-Za-z][A-Za-z\s.]*?)(?=找|的|附近|地区|有|[，,、]|\d|$)/);
   if (m && m[1]!.trim()) return cleanCity(m[1]!);
+  // city-first: "Irvine market", "San Diego prices", "Irvine 行情"
+  m = q.match(/\b([A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)?)\s+(?:[Mm]arket|[Pp]rices?|[Hh]ousing|行情|房价)/);
+  if (m) return cleanCity(m[1]!);
   return undefined;
 }
 

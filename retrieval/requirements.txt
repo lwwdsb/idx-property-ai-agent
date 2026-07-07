@@ -3,3 +3,6 @@
 qdrant-client>=1.12
 fastembed>=0.3
 pymysql>=1.1
+# warm retrieval service (Week 10)
+fastapi>=0.110
+uvicorn[standard]>=0.29

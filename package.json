@@ -14,6 +14,7 @@
     "test:agent": "tsx src/agent/conversation.test.ts",
     "test:market": "tsx src/market/marketStats.test.ts",
     "test:orch": "tsx src/orchestrator/orchestrate.test.ts",
+    "test:wa": "tsx src/whatsapp/handler.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

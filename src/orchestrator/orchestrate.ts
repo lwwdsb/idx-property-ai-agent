@@ -32,8 +32,11 @@ export async function orchestrate(
   const bridge = opts.bridge ?? pythonBridge;
   const registry = opts.registry ?? buildRegistry(bridge);
 
-  const cls = await classifyIntent(message, opts.llm);
-  logger.info('orchestrate route', { userId, intent: cls.intent, confidence: cls.confidence });
+  const cls = await classifyIntent(message, {
+    llm: opts.llm,
+    classify: (m) => bridge.classify(m),
+  });
+  logger.info('orchestrate route', { userId, intent: cls.intent, confidence: cls.confidence, via: cls.via });
 
   // low-confidence / unknown -> clarify instead of guessing (Q6)
   if (cls.confidence === 'low' && cls.clarification) {

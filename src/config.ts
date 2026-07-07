@@ -46,6 +46,10 @@ export interface Config {
   whatsapp: {
     sessionName: string;
   };
+  /** Warm Python retrieval service (Week 10). */
+  retrieval: {
+    url: string;
+  };
 }
 
 export const config: Config = {
@@ -68,6 +72,9 @@ export const config: Config = {
   },
   whatsapp: {
     sessionName: optional('WHATSAPP_SESSION_NAME', 'idx-assistant'),
+  },
+  retrieval: {
+    url: optional('RETRIEVAL_URL', 'http://localhost:8099'),
   },
 };
 

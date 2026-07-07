@@ -1,34 +1,44 @@
 /**
- * Bridge from the TS orchestrator to the Python retrieval subsystem
- * (recommend / RAG / price-validate). Injectable so tests use a fake and the
- * router logic is verified without Python/Qdrant.
+ * Bridge from the TS orchestrator to the warm Python retrieval service (Week 10).
+ * HTTP to a hot FastAPI process (model preloaded) instead of spawning python per
+ * call — ~7ms vs ~1.2s. Injectable so tests use a fake and route logic is verified
+ * without the service/Qdrant.
  */
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import path from 'node:path';
+import { config } from '../config.js';
 
-const execFileAsync = promisify(execFile);
-const ROOT = path.resolve(import.meta.dirname, '../..');
-const PY = path.join(ROOT, '.venv/bin/python');
+export interface IntentGuess {
+  skill: string;
+  score: number;
+}
 
 export interface PythonBridge {
+  classify(message: string): Promise<IntentGuess>;
   rag(question: string): Promise<string>;
   recommend(listingId: number): Promise<string>;
   validate(listing: { city: string | null; sqft: number | null; price: number | null }): Promise<string>;
 }
 
-async function run(script: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync(PY, [path.join(ROOT, 'retrieval', script), ...args], {
-    cwd: ROOT,
-    timeout: 60_000,
-    maxBuffer: 4 * 1024 * 1024,
+async function post<T>(path: string, body: unknown): Promise<T> {
+  const res = await fetch(`${config.retrieval.url}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal: AbortSignal.timeout(60_000),
   });
-  return stdout.trim();
+  if (!res.ok) throw new Error(`retrieval ${path} -> HTTP ${res.status}`);
+  return res.json() as Promise<T>;
 }
 
-/** Real bridge: shells out to the venv Python scripts. */
+/** Real bridge: HTTP to the warm retrieval service. */
 export const pythonBridge: PythonBridge = {
-  rag: (q) => run('rag.py', [q]),
-  recommend: (id) => run('recommend.py', [String(id)]),
-  validate: (l) => run('recommend.py', ['--validate', l.city ?? '', String(l.sqft ?? ''), String(l.price ?? '')]),
+  classify: (message) => post<IntentGuess>('/classify', { message }),
+  rag: async (question) => {
+    const r = await post<{ answer: string; sources: string[] }>('/rag', { question });
+    return `${r.answer}\n\nSources: ${r.sources.join('; ')}`;
+  },
+  recommend: async (listingId) => {
+    const r = await post<{ error?: string }>('/recommend', { listing_id: listingId });
+    return r.error ?? JSON.stringify(r);
+  },
+  validate: async (l) => JSON.stringify(await post('/validate', l)),
 };

@@ -12,7 +12,9 @@ import type { PythonBridge } from './bridge.js';
 import { closePool } from '../db.js';
 
 const calls: string[] = [];
+let classifyReturn = { skill: 'unknown', score: 0.2 };
 const fakeBridge: PythonBridge = {
+  async classify(m) { calls.push(`classify:${m}`); return classifyReturn; },
   async rag(q) { calls.push(`rag:${q}`); return `RAG_ANSWER for "${q}"\nSources: terms.md`; },
   async recommend(id) { calls.push(`recommend:${id}`); return `RECS_FOR ${id}`; },
   async validate(l) { calls.push(`validate:${l.city}`); return JSON.stringify({ verdict: 'Priced in line with recent comparable sales.' }); },
@@ -44,6 +46,10 @@ t('routes knowledge question -> RAG via bridge', async () => {
   assert.equal(r.intent, 'knowledge');
   assert.match(r.reply, /RAG_ANSWER/);
 });
+t('"days on market" definition is knowledge, not market (substring trap)', async () => {
+  const r = await orchestrate('u', 'what is days on market?', opts);
+  assert.equal(r.intent, 'knowledge');
+});
 
 // ---- compound recipe (search -> validate) ----
 t('compound: search + price validate chained', async () => {
@@ -52,6 +58,21 @@ t('compound: search + price validate chained', async () => {
   assert.match(r.reply, /price check/i);
   assert.match(r.reply, /in line with recent comparable/i); // from fake validate
   assert.ok(calls.some((c) => c.startsWith('validate:')), 'validate was invoked');
+});
+
+// ---- embedding fallback when regex is unsure ----
+t('regex-miss phrasing -> routed via embedding classifier', async () => {
+  classifyReturn = { skill: 'market', score: 0.9 };   // service would say "market"
+  const r = await orchestrate('u', 'give me the lay of the land please', opts); // no regex keyword
+  assert.equal(r.intent, 'market');
+  assert.ok(calls.some((c) => c.startsWith('classify:')), 'embedding classifier consulted');
+  classifyReturn = { skill: 'unknown', score: 0.2 };  // reset
+});
+t('low embedding score -> still clarify (floor)', async () => {
+  classifyReturn = { skill: 'market', score: 0.3 };   // below threshold
+  const r = await orchestrate('u', 'zzz qqq', opts);
+  assert.equal(r.intent, 'unknown');
+  classifyReturn = { skill: 'unknown', score: 0.2 };
 });
 
 // ---- clarify / fallback ----

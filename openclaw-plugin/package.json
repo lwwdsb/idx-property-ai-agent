@@ -1,0 +1,10 @@
+{
+  "name": "idx",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Routes real-estate requests from OpenClaw channels to the IDX orchestrator.",
+  "openclaw": {
+    "extensions": ["./index.ts"]
+  }
+}

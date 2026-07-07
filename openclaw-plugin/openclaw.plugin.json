@@ -1,0 +1,8 @@
+{
+  "id": "idx",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {}
+  }
+}

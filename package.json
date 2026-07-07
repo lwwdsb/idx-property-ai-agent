@@ -18,9 +18,12 @@
     "test:email": "tsx src/email/email.test.ts",
     "test:all": "npm run typecheck && npm run test && npm run eval && npm run test:agent && npm run test:market && npm run test:orch && npm run test:wa && npm run test:email",
     "drafts": "tsx src/cli/drafts.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "serve": "tsx src/server/orchestrateServer.ts"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@sinclair/typebox": "^0.34.49",
     "dotenv": "^16.4.5",
     "mysql2": "^3.11.0",
     "nodemailer": "^9.0.3"

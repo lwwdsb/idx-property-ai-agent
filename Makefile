@@ -33,3 +33,9 @@ check:          ## validate env + DB connectivity + OpenAI key
 	python3 scripts/check_env.py
 
 rebuild: import indexes check   ## full data-layer rebuild then validate
+
+up:             ## start the full local stack (MySQL, Qdrant, services)
+	bash scripts/start-local.sh
+
+down:           ## stop the app services (orchestrate + retrieval)
+	bash scripts/stop-local.sh

@@ -17,7 +17,8 @@ function extractId(message: string): number | undefined {
 }
 
 function extractEmails(message: string): string[] {
-  return message.match(/[^@\s]+@[^@\s]+\.[^@\s]+/g) ?? [];
+  // TLD must end in letters so trailing punctuation (commas, periods) isn't captured.
+  return message.match(/[^\s@,;<>]+@[^\s@,;<>]+\.[a-zA-Z]{2,}/g) ?? [];
 }
 
 export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new MySqlDraftStore()): SkillRegistry {

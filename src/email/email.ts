@@ -48,7 +48,7 @@ export async function draftEmail(req: DraftRequest, store: DraftStore): Promise<
 
 export type SendStatus = 'sent' | 'sent_dryrun' | 'not_found' | 'unauthorized' | 'already_sent' | 'not_pending';
 
-export interface OutgoingEmail { from: string; to: string; subject: string; text: string; }
+export interface OutgoingEmail { from: string; to: string; bcc?: string; subject: string; text: string; }
 export type SendFn = (msg: OutgoingEmail) => Promise<void>;
 
 let transporter: Transporter | null = null;
@@ -86,9 +86,12 @@ export async function approveAndSend(
     return { status: 'sent_dryrun', draft };
   }
 
+  // Multiple recipients go in BCC so clients don't see each other's addresses.
+  const single = draft.recipients.length === 1;
   await send({
     from: config.email.from,
-    to: draft.recipients.join(', '),
+    to: single ? draft.recipients[0]! : config.email.from,
+    bcc: single ? undefined : draft.recipients.join(', '),
     subject: draft.subject,
     text: draft.body,
   });

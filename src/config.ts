@@ -50,6 +50,16 @@ export interface Config {
   retrieval: {
     url: string;
   };
+  /** Email agent (Week 11). Outbound always requires human approval. */
+  email: {
+    from: string;
+    smtpHost: string;
+    smtpPort: number;
+    user: string;
+    password: string;
+    /** Operator numbers allowed to draft/approve emails. */
+    allowlist: string[];
+  };
 }
 
 export const config: Config = {
@@ -76,7 +86,20 @@ export const config: Config = {
   retrieval: {
     url: optional('RETRIEVAL_URL', 'http://localhost:8099'),
   },
+  email: {
+    from: optional('EMAIL_FROM'),
+    smtpHost: optional('EMAIL_SMTP_HOST'),
+    smtpPort: Number(optional('EMAIL_SMTP_PORT', '587')),
+    user: optional('EMAIL_USER') || optional('EMAIL_FROM'),
+    password: optional('EMAIL_PASSWORD'),
+    allowlist: optional('EMAIL_ALLOWLIST').split(',').map((s) => s.trim()).filter(Boolean),
+  },
 };
+
+/** True only when real SMTP creds are present; otherwise sends run as dry-run. */
+export function emailConfigured(): boolean {
+  return Boolean(config.email.smtpHost && config.email.user && config.email.password);
+}
 
 /** Throws if a feature's config is missing. Call before using OpenAI (Week 6+). */
 export function requireOpenAI(): string {

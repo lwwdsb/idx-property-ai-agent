@@ -134,19 +134,46 @@ WHATSAPP_SESSION_NAME=idx-assistant
 
 | Week | Module | Status |
 |------|--------|--------|
-| 0 | Environment setup, MySQL import, indexes, env validation | ✅ |
-| 1 | OpenClaw architecture: skills, sessions, tools, memory | ⬜ |
-| 2 | NL property search (query → structured filters) | ⬜ |
-| 3 | MySQL integration: parameterized queries, pagination | ⬜ |
-| 4 | Conversational agent: multi-turn session memory | ⬜ |
-| 5 | Market analytics over `california_sold` | ⬜ |
-| 6 | Embeddings & vector search (semantic matching) | ⬜ |
-| 7 | Recommendation engine (hybrid scoring) | ⬜ |
-| 8 | RAG pipeline (MLS field definitions, terminology) | ⬜ |
-| 9 | Multi-agent orchestration (coordinator routing) | ⬜ |
-| 10 | WhatsApp communication layer (end-to-end) | ⬜ |
-| 11 | Email agents with human-in-the-loop approval gate | ⬜ |
-| 12 | Capstone demo: full production assistant | ⬜ |
+| 0 | Environment, MySQL import, indexes, env validation | ✅ |
+| 1 | Skeleton + field dictionary + shared modules (db/config/logger) | ✅ |
+| 2 | NL property search (normalize → regex fast-path → LLM slot) | ✅ |
+| 3 | MySQL query layer (parameterized, ≤50 cap, FULLTEXT, DTO) | ✅ |
+| 4 | Conversational agent (multi-turn, patch-merge, pluggable store) | ✅ |
+| 5 | Market analytics over `california_sold` (true median, trend) | ✅ |
+| 6 | Hybrid retrieval — dense + BM25 + RRF in Qdrant | ✅ |
+| 7 | Recommendation + comp price validation + verifier gate | ✅ |
+| 8 | RAG Q&A (grounded + cited, extractive fallback) | ✅ |
+| 9 | Orchestrator — skill registry + deterministic router + recipes | ✅ |
+| 10 | Warm retrieval service + embedding intent + WhatsApp handler | ✅ |
+| 11 | Email agent — draft-then-approve, outbound locked at tool layer | ✅ |
+| 12 | Wrap-up: 5th skill wired, full test suite, docs | ✅ |
+
+**Reserved (need a credential/key, degrade gracefully without one):** LLM parsing/
+reasoning/generation (empty `LLM_API_KEY` → rules/templates/extractive); real email
+send (empty `EMAIL_*` → dry-run). **Not wired:** WhatsApp *inbound* auto-reply (send +
+handler ready; needs a gateway WebSocket `message_received` subscription).
+
+---
+
+## Running
+
+```bash
+# core (MySQL only) — search / market / multi-turn / email drafting
+make db-up                                   # start MySQL
+npm run search -- "在 Irvine 找 3 居室带泳池 250万以下"
+npm run search -- --market "Irvine"
+npm run drafts -- report Irvine client@x.com  # draft a report; then: approve <id>
+
+# semantic / RAG (Python) — hybrid vector+BM25 retrieval
+docker start idx-qdrant                       # Qdrant (vectors already ingested)
+source .venv/bin/activate
+uvicorn --app-dir retrieval service:app --port 8099   # warm service (model preloaded)
+python retrieval/search.py "craftsman with a big backyard" --city Irvine --max-price 2500000
+python retrieval/rag.py "what is DOM?"
+
+# tests
+npm run test:all                              # all TS suites + typecheck + eval
+python retrieval/test_recommend.py && python retrieval/test_rag.py
 
 ---
 

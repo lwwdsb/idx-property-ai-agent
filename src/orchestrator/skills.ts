@@ -5,6 +5,9 @@
  */
 import { handleSearchTurn } from '../agent/conversation.js';
 import { getMarketStats, formatMarketStats } from '../market/marketStats.js';
+import { MySqlDraftStore, type DraftStore } from '../email/drafts.js';
+import { draftEmail, previewDraft } from '../email/email.js';
+import { weeklyMarketReport } from '../email/templates.js';
 import { SkillRegistry } from './skill.js';
 import type { PythonBridge } from './bridge.js';
 
@@ -13,7 +16,11 @@ function extractId(message: string): number | undefined {
   return m ? Number(m[1]) : undefined;
 }
 
-export function buildRegistry(bridge: PythonBridge): SkillRegistry {
+function extractEmails(message: string): string[] {
+  return message.match(/[^@\s]+@[^@\s]+\.[^@\s]+/g) ?? [];
+}
+
+export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new MySqlDraftStore()): SkillRegistry {
   return new SkillRegistry()
     .register({
       name: 'search',
@@ -50,6 +57,23 @@ export function buildRegistry(bridge: PythonBridge): SkillRegistry {
       description: 'Answer real-estate questions (DOM, $/sqft, comps, field meanings) with sources.',
       async run(ctx) {
         return { skill: 'knowledge', reply: await bridge.rag(ctx.message) };
+      },
+    })
+    .register({
+      name: 'email',
+      description: 'Draft an outbound email (e.g. a market report) to a recipient — always pending human approval, never auto-sent.',
+      async run(ctx) {
+        const recipients = extractEmails(ctx.message);
+        if (!recipients.length) return { skill: 'email', reply: 'Who should I email? Include a recipient address.' };
+        if (!ctx.filter.city) return { skill: 'email', reply: 'Which city\'s market report? e.g. "email the Irvine report to client@x.com".' };
+        const { subject, body } = await weeklyMarketReport(ctx.filter.city);
+        const r = await draftEmail({ createdBy: ctx.userId, recipients, subject, body }, draftStore);
+        if (!r.ok) return { skill: 'email', reply: `Couldn't draft the email: ${r.error}` };
+        return {
+          skill: 'email',
+          reply: `📝 Drafted (pending your approval — I won't send it myself):\n\n${previewDraft(r.draft!)}\n\nApprove: npm run drafts -- approve ${r.draft!.id}`,
+          data: r.draft,
+        };
       },
     });
 }

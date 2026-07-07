@@ -9,6 +9,8 @@ import assert from 'node:assert/strict';
 import { orchestrate } from './orchestrate.js';
 import { buildRegistry } from './skills.js';
 import type { PythonBridge } from './bridge.js';
+import { InMemoryDraftStore } from '../email/drafts.js';
+import { config } from '../config.js';
 import { closePool } from '../db.js';
 
 const calls: string[] = [];
@@ -19,7 +21,8 @@ const fakeBridge: PythonBridge = {
   async recommend(id) { calls.push(`recommend:${id}`); return `RECS_FOR ${id}`; },
   async validate(l) { calls.push(`validate:${l.city}`); return JSON.stringify({ verdict: 'Priced in line with recent comparable sales.' }); },
 };
-const opts = { registry: buildRegistry(fakeBridge), bridge: fakeBridge };
+const opts = { registry: buildRegistry(fakeBridge, new InMemoryDraftStore()), bridge: fakeBridge };
+const OPERATOR = config.email.allowlist[0] ?? 'op';
 
 type Case = { name: string; fn: () => Promise<void> };
 const cases: Case[] = [];
@@ -49,6 +52,14 @@ t('routes knowledge question -> RAG via bridge', async () => {
 t('"days on market" definition is knowledge, not market (substring trap)', async () => {
   const r = await orchestrate('u', 'what is days on market?', opts);
   assert.equal(r.intent, 'knowledge');
+});
+
+// ---- email drafting (routes, drafts pending, never sends) ----
+t('email intent -> drafts a pending email, does not send', async () => {
+  const r = await orchestrate(OPERATOR, 'email the Irvine market report to client@example.com', opts);
+  assert.equal(r.intent, 'email');
+  assert.match(r.reply, /pending your approval/i);
+  assert.match(r.reply, /client@example.com/);
 });
 
 // ---- compound recipe (search -> validate) ----

@@ -10,7 +10,7 @@ import { filledCount, type SearchFilter } from '../search/filters.js';
 import type { LLMClient } from '../llm/client.js';
 import type { IntentGuess } from './bridge.js';
 
-export type Intent = 'search' | 'market' | 'recommend' | 'knowledge' | 'compound' | 'unknown';
+export type Intent = 'search' | 'market' | 'recommend' | 'knowledge' | 'compound' | 'email' | 'unknown';
 
 export interface Classification {
   intent: Intent;
@@ -29,11 +29,12 @@ export interface ClassifyOptions {
 
 /** Min cosine for the embedding classifier to be trusted; below -> clarify. */
 const EMBED_THRESHOLD = 0.55;
-const ROUTABLE = new Set<Intent>(['search', 'market', 'recommend', 'knowledge']);
+const ROUTABLE = new Set<Intent>(['search', 'market', 'recommend', 'knowledge', 'email']);
 
 const MARKET_RE = /\b(market|median|average price|avg price|price per|per sq\.?\s?ft|per square foot|trend|appreciat)\b|行情|均价|中位|每平尺|每平方|走势|趋势/i;
 const RECOMMEND_RE = /\b(similar|recommend|comparable|like this|more like)\b|类似|相似|推荐|像这套|差不多的/i;
 const KNOWLEDGE_RE = /\b(what is|what's|what does|how (is|are|do)|explain|define|definition|meaning|stand for)\b|什么是|怎么算|怎么计算|如何计算|什么意思|定义|表示什么/i;
+const EMAIL_RE = /\be-?mail\b|发邮件|发送邮件|邮件发给|[^@\s]+@[^@\s]+\.[^@\s]+/i;
 const VALUE_RE = /\b(priced? (fair|right|well)|worth it|good deal|overpriced|underpriced|fair price|is it worth)\b|贵不贵|值不值|合理吗|价格合理|划算/i;
 
 export async function classifyIntent(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
@@ -41,6 +42,11 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   const searchable = Boolean(parsed.filter.city);
   const value = VALUE_RE.test(message);
 
+  // email: drafting an outbound email (keyword or a recipient address present).
+  // Checked early so "email the Irvine report to x@y.com" isn't taken as a search.
+  if (EMAIL_RE.test(message)) {
+    return { intent: 'email', confidence: 'high', filter: parsed.filter, via: 'rule' };
+  }
   // compound: a real search + a "is it priced fairly" question -> recipe
   if (searchable && value) {
     return { intent: 'compound', confidence: 'high', filter: parsed.filter };

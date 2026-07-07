@@ -21,8 +21,12 @@ const fakeBridge: PythonBridge = {
   async recommend(id) { calls.push(`recommend:${id}`); return `RECS_FOR ${id}`; },
   async validate(l) { calls.push(`validate:${l.city}`); return JSON.stringify({ verdict: 'Priced in line with recent comparable sales.' }); },
 };
-const opts = { registry: buildRegistry(fakeBridge, new InMemoryDraftStore()), bridge: fakeBridge };
+const draftStore = new InMemoryDraftStore();
+const sentBox: string[] = [];
+const send = async (m: { to: string }) => { sentBox.push(m.to); };
+const opts = { registry: buildRegistry(fakeBridge, draftStore), bridge: fakeBridge, draftStore, send };
 const OPERATOR = config.email.allowlist[0] ?? 'op';
+const OUTSIDER = '+19999999999';
 
 type Case = { name: string; fn: () => Promise<void> };
 const cases: Case[] = [];
@@ -60,6 +64,29 @@ t('email intent -> drafts a pending email, does not send', async () => {
   assert.equal(r.intent, 'email');
   assert.match(r.reply, /pending your approval/i);
   assert.match(r.reply, /client@example.com/);
+});
+t('WhatsApp "approve N" sends (deterministic command, not the LLM)', async () => {
+  sentBox.length = 0;
+  const draft = await orchestrate(OPERATOR, 'email the Irvine market report to buyer@example.com', opts);
+  const id = draft.reply.match(/approve (\d+)/i)![1];
+  const r = await orchestrate(OPERATOR, `approve ${id}`, opts);
+  assert.equal(r.skill, 'email-approve');
+  assert.match(r.reply, /✅ Sent/);
+  assert.deepEqual(sentBox, ['buyer@example.com']);   // delivered to the right recipient
+});
+t('non-operator cannot approve a draft', async () => {
+  const draft = await orchestrate(OPERATOR, 'email the Irvine market report to x@example.com', opts);
+  const id = draft.reply.match(/approve (\d+)/i)![1];
+  sentBox.length = 0;
+  const r = await orchestrate(OUTSIDER, `approve ${id}`, opts);
+  assert.match(r.reply, /only the operator/i);
+  assert.equal(sentBox.length, 0);                     // not sent
+});
+t('"cancel N" cancels a pending draft', async () => {
+  const draft = await orchestrate(OPERATOR, 'email the Irvine market report to y@example.com', opts);
+  const id = draft.reply.match(/approve (\d+)/i)![1];
+  const r = await orchestrate(OPERATOR, `cancel ${id}`, opts);
+  assert.match(r.reply, /cancelled/i);
 });
 
 // ---- compound recipe (search -> validate) ----

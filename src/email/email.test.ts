@@ -1,19 +1,25 @@
 /**
- * Week 11 email red-line tests (offline, in-memory store, dry-run send).
- * The non-negotiables: no unapproved send, gated authorization, batch cap,
- * idempotent send. Run: npm run test:email
+ * Week 11 email red-line tests (offline; a FAKE sender is injected so no real mail
+ * is sent even when SMTP is configured in .env).
+ * Non-negotiables: no unapproved send, gated authorization, batch cap, idempotent send.
+ * Run: npm run test:email
  */
 import assert from 'node:assert/strict';
 import { config } from '../config.js';
 import { InMemoryDraftStore } from './drafts.js';
-import { draftEmail, approveAndSend, cancelDraft, MAX_RECIPIENTS } from './email.js';
+import { draftEmail, approveAndSend, cancelDraft, MAX_RECIPIENTS, type OutgoingEmail } from './email.js';
 
 const OP = config.email.allowlist[0] ?? 'op';          // an authorized operator
 const OUTSIDER = '+10000000001';                        // not on the allowlist
 const okReq = (over = {}) => ({ createdBy: OP, recipients: ['client@example.com'], subject: 'Hi', body: 'Body', ...over });
 
+// fake sender — records instead of delivering
+let sentBox: OutgoingEmail[] = [];
+const send = async (m: OutgoingEmail) => { sentBox.push(m); };
+
 let pass = 0, fail = 0;
 async function check(name: string, fn: () => Promise<void>) {
+  sentBox = [];
   try { await fn(); pass++; console.log('✓', name); }
   catch (e) { fail++; console.error('✗', name, '\n   ', (e as Error).message.split('\n')[0]); }
 }
@@ -23,26 +29,29 @@ await check('draftEmail creates a PENDING draft — never sent', async () => {
   const r = await draftEmail(okReq(), store);
   assert.equal(r.ok, true);
   assert.equal(r.draft!.status, 'pending_approval');   // 丙: drafting never sends
+  assert.equal(sentBox.length, 0);
 });
 
-await check('only approveAndSend can send; it marks sent (dry-run)', async () => {
+await check('only approveAndSend sends; it marks sent + delivers once', async () => {
   const store = new InMemoryDraftStore();
   const { draft } = await draftEmail(okReq(), store);
-  const r = await approveAndSend(draft!.id, OP, store);
+  const r = await approveAndSend(draft!.id, OP, store, send);
   assert.ok(r.status === 'sent' || r.status === 'sent_dryrun');
   assert.equal((await store.get(draft!.id))!.status, 'sent');
+  assert.equal(sentBox.length, 1);                     // delivered exactly once
 });
 
 await check('idempotent: approving twice does not re-send', async () => {
   const store = new InMemoryDraftStore();
   const { draft } = await draftEmail(okReq(), store);
-  await approveAndSend(draft!.id, OP, store);
-  const second = await approveAndSend(draft!.id, OP, store);
+  await approveAndSend(draft!.id, OP, store, send);
+  const second = await approveAndSend(draft!.id, OP, store, send);
   assert.equal(second.status, 'already_sent');
+  assert.equal(sentBox.length, 1);                     // still only once
 });
 
 await check('non-allowlisted user cannot draft', async () => {
-  if (config.email.allowlist.length === 0) return; // allowlist disabled in this env
+  if (config.email.allowlist.length === 0) return;
   const store = new InMemoryDraftStore();
   const r = await draftEmail(okReq({ createdBy: OUTSIDER }), store);
   assert.equal(r.ok, false);
@@ -53,9 +62,10 @@ await check('non-allowlisted approver cannot send', async () => {
   if (config.email.allowlist.length === 0) return;
   const store = new InMemoryDraftStore();
   const { draft } = await draftEmail(okReq(), store);
-  const r = await approveAndSend(draft!.id, OUTSIDER, store);
+  const r = await approveAndSend(draft!.id, OUTSIDER, store, send);
   assert.equal(r.status, 'unauthorized');
-  assert.equal((await store.get(draft!.id))!.status, 'pending_approval'); // not sent
+  assert.equal(sentBox.length, 0);
+  assert.equal((await store.get(draft!.id))!.status, 'pending_approval');
 });
 
 await check('batch cap enforced (no unbounded blast)', async () => {
@@ -77,8 +87,9 @@ await check('cancelled draft cannot be sent', async () => {
   const store = new InMemoryDraftStore();
   const { draft } = await draftEmail(okReq(), store);
   assert.equal(await cancelDraft(draft!.id, store), true);
-  const r = await approveAndSend(draft!.id, OP, store);
+  const r = await approveAndSend(draft!.id, OP, store, send);
   assert.equal(r.status, 'not_pending');
+  assert.equal(sentBox.length, 0);
 });
 
 console.log(`\n${pass}/${pass + fail} passed`);

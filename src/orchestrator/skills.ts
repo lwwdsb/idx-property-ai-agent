@@ -71,7 +71,7 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
         if (!r.ok) return { skill: 'email', reply: `Couldn't draft the email: ${r.error}` };
         return {
           skill: 'email',
-          reply: `📝 Drafted (pending your approval — I won't send it myself):\n\n${previewDraft(r.draft!)}\n\nApprove: npm run drafts -- approve ${r.draft!.id}`,
+          reply: `📝 Drafted (pending your approval — I won't send it myself):\n\n${previewDraft(r.draft!)}\n\nReply "approve ${r.draft!.id}" to send, or "cancel ${r.draft!.id}".`,
           data: r.draft,
         };
       },

@@ -48,25 +48,31 @@ export async function draftEmail(req: DraftRequest, store: DraftStore): Promise<
 
 export type SendStatus = 'sent' | 'sent_dryrun' | 'not_found' | 'unauthorized' | 'already_sent' | 'not_pending';
 
+export interface OutgoingEmail { from: string; to: string; subject: string; text: string; }
+export type SendFn = (msg: OutgoingEmail) => Promise<void>;
+
 let transporter: Transporter | null = null;
-function getTransporter(): Transporter {
+/** Real delivery via SMTP. Injectable so tests never send real mail. */
+export const realSend: SendFn = async (msg) => {
   transporter ??= nodemailer.createTransport({
     host: config.email.smtpHost,
     port: config.email.smtpPort,
     secure: config.email.smtpPort === 465,
     auth: { user: config.email.user, pass: config.email.password },
   });
-  return transporter;
-}
+  await transporter.sendMail(msg);
+};
 
 /**
  * The ONLY code path that sends. Human-invoked (approver), never the LLM.
  * Idempotent: a draft already 'sent' is not re-sent. Dry-run when SMTP is unconfigured.
+ * `send` is injectable (default = real SMTP) so tests stay hermetic.
  */
 export async function approveAndSend(
   draftId: number,
   approver: string,
   store: DraftStore,
+  send: SendFn = realSend,
 ): Promise<{ status: SendStatus; draft?: EmailDraft }> {
   const draft = await store.get(draftId);
   if (!draft) return { status: 'not_found' };
@@ -80,7 +86,7 @@ export async function approveAndSend(
     return { status: 'sent_dryrun', draft };
   }
 
-  await getTransporter().sendMail({
+  await send({
     from: config.email.from,
     to: draft.recipients.join(', '),
     subject: draft.subject,

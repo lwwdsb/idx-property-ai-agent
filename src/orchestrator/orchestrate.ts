@@ -6,16 +6,22 @@
  */
 import { classifyIntent, type Intent } from './intent.js';
 import { buildRegistry } from './skills.js';
+import { handleDraftCommand } from './draftCommands.js';
 import { pythonBridge, type PythonBridge } from './bridge.js';
 import type { SkillRegistry } from './skill.js';
 import type { LLMClient } from '../llm/client.js';
 import type { ListingRow } from '../search/listingRow.js';
+import { MySqlDraftStore, type DraftStore } from '../email/drafts.js';
+import type { SendFn } from '../email/email.js';
 import { logger } from '../logger.js';
 
 export interface OrchestrateOptions {
   registry?: SkillRegistry;
   bridge?: PythonBridge;
   llm?: LLMClient;
+  draftStore?: DraftStore;
+  /** Injectable email sender (tests only; default = real SMTP). */
+  send?: SendFn;
 }
 
 export interface OrchestrateResult {
@@ -30,7 +36,15 @@ export async function orchestrate(
   opts: OrchestrateOptions = {},
 ): Promise<OrchestrateResult> {
   const bridge = opts.bridge ?? pythonBridge;
-  const registry = opts.registry ?? buildRegistry(bridge);
+  const draftStore = opts.draftStore ?? new MySqlDraftStore();
+  const registry = opts.registry ?? buildRegistry(bridge, draftStore);
+
+  // Deterministic email approval commands FIRST — never via the LLM (丙).
+  const cmd = await handleDraftCommand(userId, message, draftStore, opts.send);
+  if (cmd !== null) {
+    logger.info('draft command', { userId, message });
+    return { intent: 'email', skill: 'email-approve', reply: cmd };
+  }
 
   const cls = await classifyIntent(message, {
     llm: opts.llm,

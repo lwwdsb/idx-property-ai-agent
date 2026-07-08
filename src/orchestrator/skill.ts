@@ -8,12 +8,15 @@
  * slot) could pick by description, or so we could emit OpenClaw SKILL.md wrappers.
  */
 import type { SearchFilter } from '../search/filters.js';
+import type { LLMClient } from '../llm/client.js';
 
 export interface SkillContext {
   userId: string;
   message: string;
   /** Params extracted by the router (reused from parseQuery). */
   filter: SearchFilter;
+  /** The configured LLM (so skills' own parsing uses the same fallback). */
+  llm?: LLMClient;
 }
 
 export interface SkillResult {

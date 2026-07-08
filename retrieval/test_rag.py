@@ -1,5 +1,7 @@
-"""Week 8 RAG correctness (offline: no Qdrant, no LLM key -> extractive mode).
-Verifies the three question types retrieve the right source and answers stay grounded.
+"""Week 8 RAG correctness (offline & hermetic: a no-LLM chat_fn is injected so the
+test is deterministic and exercises the extractive/grounded path even when a real
+LLM key is configured in .env). Verifies the question types retrieve the right
+source and answers stay grounded.
 
   python retrieval/test_rag.py
 """
@@ -17,34 +19,37 @@ def check(name, cond):
 
 
 idx = RagIndex()
+no_llm = lambda *a, **k: None                    # force extractive (ignore any live key)
+A = lambda q: answer(q, idx, chat_fn=no_llm)     # hermetic answer helper
+
 check("index built from KB", len(idx.chunks) > 5)
 
 # --- concept question ---
-r = answer("what does days on market mean?", idx)
+r = A("what does days on market mean?")
 check("DOM: top source is Days on Market", "Days on Market" in r["sources"][0])
 
 # --- term/concept: list-to-sold ---
-r = answer("how is the sold to list ratio calculated?", idx)
+r = A("how is the sold to list ratio calculated?")
 check("ratio: source mentions List-to-Sold", any("List-to-Sold" in s for s in r["sources"]))
 
 # --- concept: comps + verifier rule embedded in KB ---
-r = answer("what are comparable sales and how many do you need?", idx)
+r = A("what are comparable sales and how many do you need?")
 check("comps: source is Comparable Sales", any("Comparable Sales" in s for s in r["sources"]))
 
 # --- field question (glossary generated from schema/columns) ---
-r = answer("which column stores the number of bedrooms?", idx)
+r = A("which column stores the number of bedrooms?")
 check("field: source from fields.md", any("fields.md" in s for s in r["sources"]))
 check("field: answer mentions the bedrooms field", "Bedroom" in r["answer"] or "bed" in r["answer"].lower())
 
 # --- grounding + fallback behavior (no key) ---
-r = answer("what is price per square foot?", idx)
+r = A("what is price per square foot?")
 check("no-key -> extractive mode", r["mode"] == "extractive")
 check("answer is verbatim from a KB chunk (grounded)",
       any(r["answer"][:40] in c["text"] for c in idx.chunks))
 check("sources are cited", len(r["sources"]) >= 1)
 
 # --- irrelevant question still returns a source, doesn't crash ---
-r = answer("what is the capital of France?", idx)
+r = A("what is the capital of France?")
 check("off-topic: no crash, still cites nearest", len(r["sources"]) >= 1)
 
 print(f"\n{passed}/{passed + failed} passed")

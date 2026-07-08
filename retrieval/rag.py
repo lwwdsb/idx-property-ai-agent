@@ -68,14 +68,14 @@ class RagIndex:
         return [{**self.chunks[i], "score": float(scores[i])} for i in idx]
 
 
-def answer(question, index=None, k=3):
+def answer(question, index=None, k=3, chat_fn=chat):
     index = index or RagIndex()
     hits = index.retrieve(question, k)
     context = "\n\n".join(f"[{h['source']}]\n{h['text']}" for h in hits)
     sources = [h["source"] for h in hits]
 
     # reserved LLM generation slot — grounded answer with citations
-    generated = chat(
+    generated = chat_fn(
         f"Answer the question using ONLY the context. Cite sources in [brackets]. "
         f"If the context doesn't contain the answer, say so.\n\n"
         f"Context:\n{context}\n\nQuestion: {question}",

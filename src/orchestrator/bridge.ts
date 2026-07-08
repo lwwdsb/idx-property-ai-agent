@@ -11,11 +11,37 @@ export interface IntentGuess {
   score: number;
 }
 
+export interface SemanticSearchParams {
+  text: string;
+  city?: string | null;
+  max_price?: number | null;
+  min_price?: number | null;
+  min_beds?: number | null;
+  pool?: boolean;
+  ptype?: string | null;
+  k?: number;
+}
+
+export interface SemanticListing {
+  score: number;
+  listing_id?: number;
+  mls?: string | null;
+  address?: string | null;
+  city?: string | null;
+  type?: string | null;
+  beds?: number | null;
+  baths?: number | null;
+  sqft?: number | null;
+  price?: number | null;
+  pool?: boolean;
+}
+
 export interface PythonBridge {
   classify(message: string): Promise<IntentGuess>;
   rag(question: string): Promise<string>;
   recommend(listingId: number): Promise<string>;
   validate(listing: { city: string | null; sqft: number | null; price: number | null }): Promise<string>;
+  search(params: SemanticSearchParams): Promise<SemanticListing[]>;
 }
 
 async function post<T>(path: string, body: unknown): Promise<T> {
@@ -41,4 +67,8 @@ export const pythonBridge: PythonBridge = {
     return r.error ?? JSON.stringify(r);
   },
   validate: async (l) => JSON.stringify(await post('/validate', l)),
+  search: async (params) => {
+    const r = await post<{ results: SemanticListing[] }>('/search', params);
+    return r.results ?? [];
+  },
 };

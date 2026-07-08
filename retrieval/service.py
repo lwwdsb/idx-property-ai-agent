@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from common import get_dense
 from rag import RagIndex, answer as rag_answer
 from recommend import validate_price, recommend as do_recommend
+from search import hybrid_search, build_filter
 
 # Example utterances per skill — the embedding intent classifier matches a message
 # against these (generalizes past regex). Kept small; embedded once at startup.
@@ -104,3 +105,25 @@ def recommend(req: RecommendReq):
         return do_recommend(req.listing_id)
     except Exception as e:  # Qdrant down etc. — degrade, don't 500
         return {"error": f"recommendation unavailable: {e}"}
+
+
+class SearchReq(BaseModel):
+    text: str                       # semantic query (the soft, unstructured intent)
+    city: str | None = None
+    max_price: float | None = None
+    min_price: float | None = None
+    min_beds: float | None = None
+    pool: bool = False
+    ptype: str | None = None        # physical L_Type_ value (e.g. "Condominium")
+    k: int = 5
+
+
+@app.post("/search")
+def search(req: SearchReq):
+    """Hybrid semantic search: hard filters (payload) + dense+BM25 ranking (RRF)."""
+    try:
+        flt = build_filter(req.city, req.max_price, req.min_price, req.min_beds, req.pool, req.ptype)
+        pts = hybrid_search(req.text, flt, k=req.k, mode="hybrid")
+        return {"results": [{"score": p.score, **p.payload} for p in pts]}
+    except Exception as e:  # Qdrant down — caller degrades to MySQL
+        return {"error": f"semantic search unavailable: {e}", "results": []}

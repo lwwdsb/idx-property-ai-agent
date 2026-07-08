@@ -9,7 +9,7 @@ import { buildRegistry } from './skills.js';
 import { handleDraftCommand } from './draftCommands.js';
 import { pythonBridge, type PythonBridge } from './bridge.js';
 import type { SkillRegistry } from './skill.js';
-import type { LLMClient } from '../llm/client.js';
+import { getLLMClient, type LLMClient } from '../llm/client.js';
 import type { ListingRow } from '../search/listingRow.js';
 import { MySqlDraftStore, type DraftStore } from '../email/drafts.js';
 import type { SendFn } from '../email/email.js';
@@ -46,8 +46,11 @@ export async function orchestrate(
     return { intent: 'email', skill: 'email-approve', reply: cmd };
   }
 
+  // default to the configured LLM (DeepSeek) so the parse-extraction fallback is
+  // live, not just wired in tests. Empty key => an unavailable client (regex only).
+  const llm = opts.llm ?? getLLMClient();
   const cls = await classifyIntent(message, {
-    llm: opts.llm,
+    llm,
     classify: (m) => bridge.classify(m),
   });
   logger.info('orchestrate route', { userId, intent: cls.intent, confidence: cls.confidence, via: cls.via });
@@ -57,7 +60,7 @@ export async function orchestrate(
     return { intent: cls.intent, reply: cls.clarification };
   }
 
-  const ctx = { userId, message, filter: cls.filter };
+  const ctx = { userId, message, filter: cls.filter, llm };
 
   // compound recipe: search, then validate the top result's price (fixed chain)
   if (cls.intent === 'compound') {

@@ -15,11 +15,13 @@ import { closePool } from '../db.js';
 
 const calls: string[] = [];
 let classifyReturn = { skill: 'unknown', score: 0.2 };
+let searchReturn: Array<Record<string, unknown>> = [];
 const fakeBridge: PythonBridge = {
   async classify(m) { calls.push(`classify:${m}`); return classifyReturn; },
   async rag(q) { calls.push(`rag:${q}`); return `RAG_ANSWER for "${q}"\nSources: terms.md`; },
   async recommend(id) { calls.push(`recommend:${id}`); return `RECS_FOR ${id}`; },
   async validate(l) { calls.push(`validate:${l.city}`); return JSON.stringify({ verdict: 'Priced in line with recent comparable sales.' }); },
+  async search(p) { calls.push(`search:${p.text}|city=${p.city}`); return searchReturn as never; },
 };
 const draftStore = new InMemoryDraftStore();
 const sentBox: string[] = [];
@@ -42,6 +44,20 @@ t('routes market query -> market (city-first)', async () => {
   const r = await orchestrate('u', 'Irvine 行情怎么样', opts);
   assert.equal(r.intent, 'market');
   assert.match(r.reply, /median|sales/i);
+});
+t('semantic search: soft query -> Qdrant hybrid (with hard filter)', async () => {
+  searchReturn = [{ score: 0.9, address: '1 View Ln', city: 'Irvine', price: 1400000, beds: 3, type: 'SingleFamilyResidence' }];
+  const r = await orchestrate('u', '在 Irvine 找有山景的工匠风老宅 150万以下', opts);
+  assert.equal(r.intent, 'search');
+  assert.ok(calls.some((c) => c.startsWith('search:')), 'went to semantic search');
+  assert.match(r.reply, /semantic:|View Ln/);
+  searchReturn = [];
+});
+t('pure structured query -> MySQL (no semantic call)', async () => {
+  calls.length = 0;
+  const r = await orchestrate('u', '在 Irvine 找 3 居室 150万以下', opts);
+  assert.equal(r.intent, 'search');
+  assert.ok(!calls.some((c) => c.startsWith('search:')), 'no semantic residual -> stays on MySQL');
 });
 t('routes recommend query -> recommend skill via bridge', async () => {
   const r = await orchestrate('u', '跟 1174456906 类似的房子', opts);

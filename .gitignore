@@ -102,3 +102,6 @@ logs/
 tmp/
 scratch/
 openclaw-plugin/node_modules/
+
+# 学习笔记(本地,不入库)
+learning/

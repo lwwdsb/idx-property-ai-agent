@@ -1,5 +1,7 @@
 # IDX Property AI Agent
 
+> **English** · [中文](README.cn.md)
+
 A production-style AI assistant for real estate, built on the
 [OpenClaw](https://github.com/openclaw/openclaw) runtime. It answers natural-language
 questions over ~145K real California MLS records — property search, market analytics,

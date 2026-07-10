@@ -113,7 +113,7 @@ class SearchReq(BaseModel):
     max_price: float | None = None
     min_price: float | None = None
     min_beds: float | None = None
-    pool: bool = False
+    pool: bool | None = None        # tri-state: True=has / False=no / None=don't care
     ptype: str | None = None        # physical L_Type_ value (e.g. "Condominium")
     k: int = 5
 

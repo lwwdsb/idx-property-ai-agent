@@ -11,7 +11,7 @@ from qdrant_client import models
 from common import COLLECTION, get_dense, get_qdrant, get_sparse
 
 
-def build_filter(city=None, max_price=None, min_price=None, min_beds=None, pool=False, ptype=None):
+def build_filter(city=None, max_price=None, min_price=None, min_beds=None, pool=None, ptype=None):
     must = []
     if city:
         must.append(models.FieldCondition(key="city", match=models.MatchValue(value=city)))
@@ -19,8 +19,8 @@ def build_filter(city=None, max_price=None, min_price=None, min_beds=None, pool=
         must.append(models.FieldCondition(key="price", range=models.Range(gte=min_price, lte=max_price)))
     if min_beds is not None:
         must.append(models.FieldCondition(key="beds", range=models.Range(gte=min_beds)))
-    if pool:
-        must.append(models.FieldCondition(key="pool", match=models.MatchValue(value=True)))
+    if pool is not None:  # tri-state: True=has pool, False=no pool, None=don't care
+        must.append(models.FieldCondition(key="pool", match=models.MatchValue(value=bool(pool))))
     if ptype:
         must.append(models.FieldCondition(key="type", match=models.MatchValue(value=ptype)))
     return models.Filter(must=must) if must else None
@@ -56,7 +56,8 @@ def main():
     ap.add_argument("--max-price", type=float)
     ap.add_argument("--min-price", type=float)
     ap.add_argument("--min-beds", type=float)
-    ap.add_argument("--pool", action="store_true")
+    ap.add_argument("--pool", action="store_const", const=True, default=None)
+    ap.add_argument("--no-pool", dest="pool", action="store_const", const=False)
     ap.add_argument("--type", dest="ptype")
     ap.add_argument("--mode", default="hybrid", choices=["hybrid", "dense", "bm25"])
     ap.add_argument("-k", type=int, default=5)

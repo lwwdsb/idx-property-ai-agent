@@ -71,6 +71,19 @@ t('中文: 以上 = minPrice', () => {
   assert.equal(f.minPrice, 2_000_000);
 });
 
+// ---- pool is tri-state (negation must not be a false positive) ----
+t('EN: "without a pool" -> pool false', () => {
+  const f = regexParse('3 bed in Irvine without a pool');
+  assert.equal(f.pool, false); assert.equal(f.city, 'Irvine'); assert.equal(f.beds, 3);
+});
+t('中文: 不要泳池 -> false, 带泳池 -> true', () => {
+  assert.equal(regexParse('在 Irvine 找不要泳池的房子').pool, false);
+  assert.equal(regexParse('在 Irvine 找带泳池的房子').pool, true);
+});
+t('summarizeFilter shows "no pool" for false', () => {
+  assert.equal(summarizeFilter({ city: 'Irvine', pool: false }), 'Irvine · no pool');
+});
+
 // ---- parseQuery: confidence / clarification (structural) ----
 t('parseQuery: city present -> high', async () => {
   const r = await parseQuery('3 bed in Irvine under 1M');

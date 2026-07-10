@@ -66,7 +66,8 @@ export function summarizeFilter(f: SearchFilter): string {
   if (f.minSqft !== undefined) parts.push(`${f.minSqft}+ sqft`);
   if (f.minPrice !== undefined) parts.push(`≥$${fmtPrice(f.minPrice)}`);
   if (f.maxPrice !== undefined) parts.push(`≤$${fmtPrice(f.maxPrice)}`);
-  if (f.pool) parts.push('pool');
+  if (f.pool === true) parts.push('pool');
+  else if (f.pool === false) parts.push('no pool');
   if (f.keywords) parts.push(`"${f.keywords}"`);
   return parts.length ? parts.join(' · ') : '(no filters)';
 }

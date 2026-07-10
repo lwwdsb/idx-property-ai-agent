@@ -55,7 +55,8 @@ function buildWhere(f: SearchFilter): { sql: string; params: unknown[] } {
   if (f.propertyType && TYPE_DB[f.propertyType]) {
     clauses.push(`${col('propertyType', RP)} = ?`); params.push(TYPE_DB[f.propertyType]);
   }
-  if (f.pool) { clauses.push(`${col('pool', RP)} = '1'`); }
+  if (f.pool === true) { clauses.push(`${col('pool', RP)} = '1'`); }
+  else if (f.pool === false) { clauses.push(`COALESCE(${col('pool', RP)}, '') <> '1'`); }
   if (f.minSqft != null) { clauses.push(`${col('livingArea', RP)} >= ?`); params.push(f.minSqft); }
   if (f.keywords) {
     clauses.push(`MATCH(${col('remarks', RP)}) AGAINST (? IN NATURAL LANGUAGE MODE)`);

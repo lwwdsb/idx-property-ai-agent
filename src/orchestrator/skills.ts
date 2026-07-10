@@ -76,7 +76,7 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
               max_price: ctx.filter.maxPrice ?? null,
               min_price: ctx.filter.minPrice ?? null,
               min_beds: ctx.filter.beds ?? null,
-              pool: ctx.filter.pool ?? false,
+              pool: ctx.filter.pool,   // tri-state: true=has / false=no / undefined=don't care
               ptype: ctx.filter.propertyType ? TYPE_DB[ctx.filter.propertyType] ?? null : null,
               k: 5,
             });

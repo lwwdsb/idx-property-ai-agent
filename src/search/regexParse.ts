@@ -96,7 +96,11 @@ export function regexParse(query: string): SearchFilter {
       (m = q.match(/(\d[\d,]*)\s*(?:平方英尺|平方呎)/))) {
     f.minSqft = Number(m[1]!.replace(/,/g, ''));
   }
-  if (/\bpool\b/i.test(q) || /泳池|游泳池/.test(q)) f.pool = true;
+  // pool is tri-state: honor negation so "no pool"/"不要泳池" isn't a false positive.
+  const NO_POOL = /(?:no|without|not|non-?|excluding|don'?t\s+(?:want|need))\s+(?:a\s+)?(?:private\s+)?pools?\b|(?:不要|不带|不需要|没有|无|不含|去掉|去除|取消)\s*(?:私家|私人)?(?:泳池|游泳池)/i;
+  const HAS_POOL = /\bpools?\b|泳池|游泳池/i;
+  if (NO_POOL.test(q)) f.pool = false;
+  else if (HAS_POOL.test(q)) f.pool = true;
 
   for (const [re, type] of TYPE_PATTERNS) {
     if (re.test(q)) { f.propertyType = type; break; }

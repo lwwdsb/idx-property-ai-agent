@@ -76,6 +76,10 @@ or match on city + postal code for market-level analysis. A **field dictionary**
 - **NL property search** — `normalize → regex fast-path → DeepSeek fallback → clarify`.
   Bilingual (EN/中文). Pure structured queries hit MySQL; queries with soft/semantic
   content (e.g. *"ocean-view craftsman with a big backyard"*) route to the Qdrant hybrid.
+  Parsing is negation-aware (tri-state pool: has / no / don't-care) and **validates the
+  extracted city** against the cities we actually serve; a suspicious parse — a bogus
+  city ("USC", "Gotham") or a negation the regex handles poorly — escalates to the LLM
+  as an on-demand critic (or asks for a real city) instead of searching a wrong query.
 - **Semantic search** — dense (`bge-small`) + BM25, fused with Reciprocal Rank Fusion,
   with hard constraints applied as **payload filters inside Qdrant** (filter-first, then
   rank). Falls back to MySQL if Qdrant is down.

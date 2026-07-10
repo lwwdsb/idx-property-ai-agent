@@ -84,6 +84,34 @@ t('summarizeFilter shows "no pool" for false', () => {
   assert.equal(summarizeFilter({ city: 'Irvine', pool: false }), 'Irvine · no pool');
 });
 
+// ---- city validation (output sanity check) + risk-word escalation ----
+const knownCities = (...set: string[]) => (c: string) =>
+  set.map((s) => s.toLowerCase()).includes(c.trim().toLowerCase());
+
+t('city validation: rejects a non-real city, keeps constraints, clarifies', async () => {
+  const r = await parseQuery('在 USC 附近找 3 居室', { isKnownCity: knownCities('irvine', 'san diego') });
+  assert.equal(r.confidence, 'low');
+  assert.match(r.clarification!, /USC/);        // echoes what it couldn't serve
+  assert.equal(r.filter.city, undefined);
+  assert.equal(r.filter.beds, 3);               // other constraints preserved
+});
+t('city validation: accepts a real city', async () => {
+  const r = await parseQuery('3 bed in Irvine', { isKnownCity: knownCities('irvine') });
+  assert.equal(r.confidence, 'high'); assert.equal(r.filter.city, 'Irvine');
+});
+t('city validation: LLM rescues a city regex missed, then validated', async () => {
+  const r = await parseQuery('homes under 1m near the USC campus', {
+    isKnownCity: knownCities('los angeles'), llm: mockLLM({ city: 'Los Angeles' }),
+  });
+  assert.equal(r.confidence, 'high'); assert.equal(r.filter.city, 'Los Angeles');
+});
+t('risk word (negation) escalates to LLM even when regex already parsed a city', async () => {
+  let called = false;
+  const spy: LLMClient = { available: true, async parseFilters() { called = true; return {} as never; } };
+  await parseQuery('3 bed in Irvine without a pool', { isKnownCity: knownCities('irvine'), llm: spy });
+  assert.equal(called, true);                   // ② negation -> double-check via LLM
+});
+
 // ---- parseQuery: confidence / clarification (structural) ----
 t('parseQuery: city present -> high', async () => {
   const r = await parseQuery('3 bed in Irvine under 1M');

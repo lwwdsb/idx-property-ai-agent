@@ -7,6 +7,7 @@
  * filter (Q12 transparency). No LLM key required (regex + structural signals).
  */
 import { parseQuery } from '../search/parseQuery.js';
+import { isKnownCity } from '../search/cityDictionary.js';
 import { summarizeFilter, type SearchFilter } from '../search/filters.js';
 import { searchActiveListings, searchSignal } from '../search/searchListings.js';
 import { formatListingCard, type ListingRow } from '../search/listingRow.js';
@@ -54,7 +55,7 @@ export async function handleSearchTurn(
   const session = (await store.get(userId)) ?? freshSession();
 
   // parse this turn as a patch onto the running filter
-  const parsed = await parseQuery(message, { base: session.filter, llm: opts.llm });
+  const parsed = await parseQuery(message, { base: session.filter, llm: opts.llm, isKnownCity });
   session.filter = parsed.filter;
   session.step += 1;
 

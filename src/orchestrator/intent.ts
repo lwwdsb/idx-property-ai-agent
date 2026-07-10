@@ -6,6 +6,7 @@
  * (Q6: don't guess). Param extraction is merged in by reusing parseQuery.
  */
 import { parseQuery } from '../search/parseQuery.js';
+import { isKnownCity } from '../search/cityDictionary.js';
 import { filledCount, type SearchFilter } from '../search/filters.js';
 import type { LLMClient } from '../llm/client.js';
 import type { IntentGuess } from './bridge.js';
@@ -38,7 +39,7 @@ const EMAIL_RE = /\be-?mail\b|发邮件|发送邮件|邮件发给|[^@\s]+@[^@\s]
 const VALUE_RE = /\b(priced? (fair|right|well)|worth it|good deal|overpriced|underpriced|fair price|is it worth)\b|贵不贵|值不值|合理吗|价格合理|划算/i;
 
 export async function classifyIntent(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
-  const parsed = await parseQuery(message, { llm: opts.llm });
+  const parsed = await parseQuery(message, { llm: opts.llm, isKnownCity });
   const searchable = Boolean(parsed.filter.city);
   const value = VALUE_RE.test(message);
 
@@ -70,8 +71,9 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   if (searchable) {
     return { intent: 'search', confidence: 'high', filter: parsed.filter };
   }
-  // some constraints but no city -> it's a search that needs a city
-  if (filledCount(parsed.filter) > 0) {
+  // some constraints, OR a named-but-unserveable city -> it's a search that needs a
+  // valid city. Ask (with the specific reason) instead of falling to a guess.
+  if (filledCount(parsed.filter) > 0 || parsed.rejectedCity) {
     return { intent: 'search', confidence: 'low', filter: parsed.filter, via: 'rule',
              clarification: parsed.clarification ?? 'Which city are you looking in?' };
   }

@@ -32,7 +32,7 @@ export interface ClassifyOptions {
 const EMBED_THRESHOLD = 0.55;
 const ROUTABLE = new Set<Intent>(['search', 'market', 'recommend', 'knowledge', 'email']);
 
-export const MARKET_RE = /\b(market|median|average price|avg price|price per|per sq\.?\s?ft|per square foot|trend|appreciat)\b|行情|均价|中位|每平尺|每平方|走势|趋势/i;
+export const MARKET_RE = /\b(market|median|average price|avg price|price per|per sq\.?\s?ft|per square foot|trend|appreciat)\b|行情|均价|中位|每平尺|每平方|走势|趋势|房价|涨|跌|升值|贬值|涨幅|跌幅/i;
 export const RECOMMEND_RE = /\b(similar|recommend|comparable|like this|more like)\b|类似|相似|推荐|像这套|差不多的/i;
 export const KNOWLEDGE_RE = /\b(what is|what's|what does|how (is|are|do)|explain|define|definition|meaning|stand for)\b|什么是|怎么算|怎么计算|如何计算|什么意思|定义|表示什么/i;
 export const EMAIL_RE = /\be-?mail\b|发邮件|发送邮件|邮件发给|[^@\s]+@[^@\s]+\.[^@\s]+/i;

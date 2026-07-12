@@ -32,7 +32,7 @@ const EN_FILLER = /\b(find|show|me|i|want|looking|for|homes?|houses?|property|pr
 const ZH_FILLER = /找|帮我|想要?|房子|套|在|的|一下|附近|以下|以上|以内|左右|大概|带|要|有没有|给我|再|这个?|这座|城市/g;
 // Cross-intent action/query words — never property FEATURES, so they must not pollute
 // the semantic search text (matters when a multi-skill plan hands the full message to search).
-const ACTION_WORDS = /\b(market|trend|appreciat\w*|similar|recommend|comparable|worth)\b|行情|怎么样|看看|走势|趋势|市场|贵不贵|值不值|类似|相似|推荐|均价|中位|多少钱/gi;
+const ACTION_WORDS = /\b(market|trend|appreciat\w*|similar|recommend|comparable|worth)\b|行情|怎么样|看看|走势|趋势|市场|贵不贵|值不值|类似|相似|推荐|均价|中位|多少钱|房价|涨了?|跌了?|升值|贬值|另外|房子/gi;
 
 /** The "soft" part of a query — what's left after removing structured/filler tokens.
  * Non-empty => the user wants semantic matching (route to the Qdrant hybrid). */

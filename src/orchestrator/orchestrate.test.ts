@@ -15,6 +15,12 @@ import { config } from '../config.js';
 import { closePool } from '../db.js';
 
 const noLLM: LLMClient = { available: false, async parseFilters() { return {}; } };
+// a planner LLM that decomposes into per-skill sub-queries
+const planLLM: LLMClient = {
+  available: true,
+  async parseFilters() { return {}; },
+  async planSkills() { return [{ skill: 'search', query: '3 bed in Irvine' }, { skill: 'market', query: 'Irvine' }]; },
+};
 
 const calls: string[] = [];
 let classifyReturn = { skill: 'unknown', score: 0.2 };
@@ -116,6 +122,13 @@ t('multi-intent (search + market) -> planner runs both skills', async () => {
   assert.match(r.reply, /Current filter|match/i);        // search part
   assert.match(r.reply, /median|sales|No recent/i);       // market part
   assert.ok((r.skill ?? '').includes('+'), 'composed multiple skills');
+});
+t('planner: LLM decomposes into per-skill sub-queries, runs both', async () => {
+  const r = await orchestrate('u', '在 Irvine 找 3 居室，再看看行情', { ...opts, llm: planLLM });
+  assert.equal(r.intent, 'compound');
+  assert.ok((r.skill ?? '').includes('search') && (r.skill ?? '').includes('market'), 'both skills ran');
+  assert.match(r.reply, /Current filter|match/i);
+  assert.match(r.reply, /median|sales|No recent/i);
 });
 t('single intent does NOT trigger the planner', async () => {
   const r = await orchestrate('u', '在 Irvine 找 3 居室 200万以下', { ...opts, llm: noLLM });

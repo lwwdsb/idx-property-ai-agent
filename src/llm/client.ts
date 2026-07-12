@@ -10,20 +10,27 @@ import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { FILTER_KEYS, type FilterPatch, type SearchFilter } from '../search/filters.js';
 
+/** One step of a multi-skill plan: which skill + the self-contained sub-query for it. */
+export interface PlanStep { skill: string; query: string; }
+
 export interface LLMClient {
   readonly available: boolean;
   parseFilters(query: string): Promise<FilterPatch>;
-  /** Plan an ordered subset of skill names (from `skills`) needed to answer.
-   * Optional — callers must fall back deterministically when absent (乙). */
-  planSkills?(message: string, skills: Array<{ name: string; description: string }>): Promise<string[]>;
+  /** Plan an ordered set of skills + a per-skill sub-query (the LLM decomposes the
+   * message so each skill only sees its own part). Optional — callers must fall back
+   * deterministically when absent (乙). */
+  planSkills?(message: string, skills: Array<{ name: string; description: string }>): Promise<PlanStep[]>;
 }
 
 const PLAN_PROMPT = [
   'You are a task planner for a real-estate assistant.',
-  'Given a user message and a list of available skills, output the MINIMAL ordered set',
-  'of skills needed to fully answer. Prefer a single skill; use several ONLY when the',
-  'message clearly asks for multiple things (e.g. find homes AND show the market).',
-  'Use only skill names from the list. Return JSON only: {"plan": ["skillName", ...]}.',
+  'Given a user message and available skills, output the MINIMAL ordered set of skills',
+  'needed to fully answer. Prefer ONE skill; use several ONLY when the message clearly',
+  'asks for multiple things (e.g. find homes AND show the market).',
+  'For EACH chosen skill, also give "query": the self-contained part of the message',
+  'relevant to that skill only (keep its constraints; drop the other skills\' parts).',
+  'Use only skill names from the list. Return JSON only:',
+  '{"plan": [{"skill": "name", "query": "sub-query for this skill"}, ...]}',
 ].join('\n');
 
 const SYSTEM_PROMPT = [
@@ -110,18 +117,24 @@ export function getLLMClient(): LLMClient {
       logger.debug('llm parsed filters', { query, filter });
       return filter;
     },
-    async planSkills(message, skills): Promise<string[]> {
+    async planSkills(message, skills): Promise<PlanStep[]> {
       const user = `Available skills:\n${skills.map((s) => `- ${s.name}: ${s.description}`).join('\n')}`
         + `\n\nUser message: ${message}`;
       const raw = await chatJSON(PLAN_PROMPT, user) as { plan?: unknown };
       const known = new Set(skills.map((s) => s.name));
-      const plan = Array.isArray(raw?.plan) ? raw.plan : [];
-      // validate: only known skill names, de-duped, capped at 3 (no runaway plans)
+      const items = Array.isArray(raw?.plan) ? raw.plan : [];
+      // validate: only known skill names, de-duped, capped at 3 (no runaway plans);
+      // a missing/blank sub-query falls back to the full message.
       const seen = new Set<string>();
-      const out: string[] = [];
-      for (const n of plan) {
-        if (typeof n === 'string' && known.has(n) && !seen.has(n)) { seen.add(n); out.push(n); }
-        if (out.length >= 3) break;
+      const out: PlanStep[] = [];
+      for (const it of items) {
+        const skill = (it as { skill?: unknown })?.skill;
+        const query = (it as { query?: unknown })?.query;
+        if (typeof skill === 'string' && known.has(skill) && !seen.has(skill)) {
+          seen.add(skill);
+          out.push({ skill, query: typeof query === 'string' && query.trim() ? query.trim() : message });
+          if (out.length >= 3) break;
+        }
       }
       logger.debug('llm plan', { message, plan: out });
       return out;

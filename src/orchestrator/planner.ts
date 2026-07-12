@@ -11,7 +11,7 @@
  */
 import type { SearchFilter } from '../search/filters.js';
 import type { SkillContext, SkillRegistry } from './skill.js';
-import type { LLMClient } from '../llm/client.js';
+import type { LLMClient, PlanStep } from '../llm/client.js';
 import { MARKET_RE, RECOMMEND_RE, KNOWLEDGE_RE, EMAIL_RE } from './intent.js';
 
 // A real "search" needs a constraint beyond city (else "Irvine 行情" would look like
@@ -33,39 +33,46 @@ export function detectMultiIntent(message: string, filter: SearchFilter): string
   return ORDER.filter((s) => set.has(s));
 }
 
-/** Returns an ordered plan of >=2 skills, or null to fall back to single-skill routing. */
+/** Returns an ordered plan of >=2 steps, or null to fall back to single-skill routing.
+ * The LLM decomposes the message into per-skill sub-queries; the deterministic fallback
+ * hands each skill the full message (乙). */
 export async function maybePlan(
   message: string,
   filter: SearchFilter,
   registry: SkillRegistry,
   llm?: LLMClient,
-): Promise<string[] | null> {
+): Promise<PlanStep[] | null> {
   const detected = detectMultiIntent(message, filter);
   if (detected.length < 2) return null;                 // gate: single intent -> normal routing
 
-  let plan: string[] | null = null;
+  let plan: PlanStep[] | null = null;
   if (llm?.available && llm.planSkills) {
     try {
       const p = await llm.planSkills(message, registry.list().map((s) => ({ name: s.name, description: s.description })));
-      if (p.length) plan = p;                            // client already validated (known names, cap 3)
+      if (p.length) plan = p;                            // client validated (known names, cap 3)
     } catch { /* 乙: planner failure -> deterministic fallback */ }
   }
-  if (!plan) plan = detected.filter((s) => registry.has(s)).slice(0, MAX_PLAN);
+  // fallback: each detected skill gets the full message (no LLM to split it)
+  if (!plan) plan = detected.map((s) => ({ skill: s, query: message }));
+  plan = plan.filter((st) => registry.has(st.skill)).slice(0, MAX_PLAN);
   return plan.length >= 2 ? plan : null;                 // LLM may decide it's really single -> null
 }
 
-/** Run the planned skills in order and compose their replies (plan-then-execute, once). */
+/** Run the planned steps in order, each skill on ITS OWN sub-query, compose replies
+ * (plan-then-execute, once). The LLM keeps each sub-query self-contained (its own
+ * constraints); the semantic-search path also reuses ctx.filter. A lossy sub-query at
+ * worst broadens that skill's results (still valid + user-visible), never fabricates. */
 export async function executePlan(
-  plan: string[],
+  plan: PlanStep[],
   ctx: SkillContext,
   registry: SkillRegistry,
 ): Promise<{ reply: string; skills: string[] }> {
   const parts: string[] = [];
   const skills: string[] = [];
-  for (const name of plan) {
-    const skill = registry.get(name);
+  for (const step of plan) {
+    const skill = registry.get(step.skill);
     if (!skill) continue;
-    const res = await skill.run(ctx);
+    const res = await skill.run({ ...ctx, message: step.query });
     parts.push(res.reply);
     skills.push(res.skill);
   }

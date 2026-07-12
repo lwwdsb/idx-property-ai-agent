@@ -70,6 +70,10 @@ t('中文: 以上 = minPrice', () => {
   const f = regexParse('San Jose 200万以上的房子');
   assert.equal(f.minPrice, 2_000_000);
 });
+t('中文: city aliases resolve (尔湾 -> Irvine)', async () => {
+  assert.equal((await parseQuery('尔湾行情')).filter.city, 'Irvine');
+  assert.equal((await parseQuery('在圣地亚哥找 3 居室 200万以下')).filter.city, 'San Diego');
+});
 
 // ---- pool is tri-state (negation must not be a false positive) ----
 t('EN: "without a pool" -> pool false', () => {

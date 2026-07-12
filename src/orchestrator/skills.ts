@@ -29,7 +29,10 @@ function extractEmails(message: string): string[] {
 }
 
 const EN_FILLER = /\b(find|show|me|i|want|looking|for|homes?|houses?|property|properties|in|near|around|with|under|over|below|above|between|and|a|an|the|please|less|than|more|of|to)\b/gi;
-const ZH_FILLER = /找|帮我|想要?|房子|套|在|的|一下|附近|以下|以上|以内|左右|大概|带|要|有没有|给我/g;
+const ZH_FILLER = /找|帮我|想要?|房子|套|在|的|一下|附近|以下|以上|以内|左右|大概|带|要|有没有|给我|再|这个?|这座|城市/g;
+// Cross-intent action/query words — never property FEATURES, so they must not pollute
+// the semantic search text (matters when a multi-skill plan hands the full message to search).
+const ACTION_WORDS = /\b(market|trend|appreciat\w*|similar|recommend|comparable|worth)\b|行情|怎么样|看看|走势|趋势|市场|贵不贵|值不值|类似|相似|推荐|均价|中位|多少钱/gi;
 
 /** The "soft" part of a query — what's left after removing structured/filler tokens.
  * Non-empty => the user wants semantic matching (route to the Qdrant hybrid). */
@@ -40,7 +43,7 @@ export function extractSemanticText(message: string, filter: SearchFilter): stri
   s = s.replace(/\$?\d[\d.,]*\s*(?:万|million|mil|m|k|thousand|bed(?:room)?s?|br|bd|bath(?:room)?s?|ba|sqft|sq\.?\s?ft|square feet|平方英尺|居室|室|卧室|卧|房|卫|平)?/gi, ' ');
   // property-type + pool words
   s = s.replace(/\b(?:single[\s-]?family|sfr|detached|town\s?houses?|town\s?homes?|condos?|condominiums?|apartments?|apts?)\b|独栋|单户|联排|公寓|pool|泳池|游泳池/gi, ' ');
-  s = s.replace(EN_FILLER, ' ').replace(ZH_FILLER, ' ');
+  s = s.replace(ACTION_WORDS, ' ').replace(EN_FILLER, ' ').replace(ZH_FILLER, ' ');
   s = s.replace(/[，,、。.!?？!:：;；]/g, ' ').replace(/\s+/g, ' ').trim();
   const content = s.match(/[A-Za-z]{2,}|[一-鿿]/g) ?? [];
   return content.length >= 1 ? s : '';

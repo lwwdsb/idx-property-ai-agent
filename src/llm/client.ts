@@ -13,7 +13,18 @@ import { FILTER_KEYS, type FilterPatch, type SearchFilter } from '../search/filt
 export interface LLMClient {
   readonly available: boolean;
   parseFilters(query: string): Promise<FilterPatch>;
+  /** Plan an ordered subset of skill names (from `skills`) needed to answer.
+   * Optional — callers must fall back deterministically when absent (乙). */
+  planSkills?(message: string, skills: Array<{ name: string; description: string }>): Promise<string[]>;
 }
+
+const PLAN_PROMPT = [
+  'You are a task planner for a real-estate assistant.',
+  'Given a user message and a list of available skills, output the MINIMAL ordered set',
+  'of skills needed to fully answer. Prefer a single skill; use several ONLY when the',
+  'message clearly asks for multiple things (e.g. find homes AND show the market).',
+  'Use only skill names from the list. Return JSON only: {"plan": ["skillName", ...]}.',
+].join('\n');
 
 const SYSTEM_PROMPT = [
   'You extract real-estate search filters from a user message (English or Chinese).',
@@ -71,30 +82,49 @@ export function getLLMClient(): LLMClient {
       },
     };
   }
+  async function chatJSON(system: string, user: string): Promise<unknown> {
+    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({
+        model,
+        temperature: 0,
+        messages: [
+          { role: 'system', content: system },
+          { role: 'user', content: user },
+        ],
+        response_format: { type: 'json_object' },
+      }),
+    });
+    if (!res.ok) {
+      throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+    }
+    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+    return extractJson(data.choices?.[0]?.message?.content ?? '{}');
+  }
+
   return {
     available: true,
     async parseFilters(query: string): Promise<FilterPatch> {
-      const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          temperature: 0,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            { role: 'user', content: query },
-          ],
-          response_format: { type: 'json_object' },
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      }
-      const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-      const content = data.choices?.[0]?.message?.content ?? '{}';
-      const filter = sanitizeFilter(extractJson(content));
+      const filter = sanitizeFilter(await chatJSON(SYSTEM_PROMPT, query));
       logger.debug('llm parsed filters', { query, filter });
       return filter;
+    },
+    async planSkills(message, skills): Promise<string[]> {
+      const user = `Available skills:\n${skills.map((s) => `- ${s.name}: ${s.description}`).join('\n')}`
+        + `\n\nUser message: ${message}`;
+      const raw = await chatJSON(PLAN_PROMPT, user) as { plan?: unknown };
+      const known = new Set(skills.map((s) => s.name));
+      const plan = Array.isArray(raw?.plan) ? raw.plan : [];
+      // validate: only known skill names, de-duped, capped at 3 (no runaway plans)
+      const seen = new Set<string>();
+      const out: string[] = [];
+      for (const n of plan) {
+        if (typeof n === 'string' && known.has(n) && !seen.has(n)) { seen.add(n); out.push(n); }
+        if (out.length >= 3) break;
+      }
+      logger.debug('llm plan', { message, plan: out });
+      return out;
     },
   };
 }

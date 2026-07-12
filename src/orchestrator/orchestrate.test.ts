@@ -10,8 +10,11 @@ import { orchestrate } from './orchestrate.js';
 import { buildRegistry } from './skills.js';
 import type { PythonBridge } from './bridge.js';
 import { InMemoryDraftStore } from '../email/drafts.js';
+import type { LLMClient } from '../llm/client.js';
 import { config } from '../config.js';
 import { closePool } from '../db.js';
+
+const noLLM: LLMClient = { available: false, async parseFilters() { return {}; } };
 
 const calls: string[] = [];
 let classifyReturn = { skill: 'unknown', score: 0.2 };
@@ -106,6 +109,23 @@ t('"cancel N" cancels a pending draft', async () => {
 });
 
 // ---- compound recipe (search -> validate) ----
+t('multi-intent (search + market) -> planner runs both skills', async () => {
+  // no-LLM planner => deterministic detected set [search, market]
+  const r = await orchestrate('u', '在 Irvine 找 3 居室，再看看这个城市的行情', { ...opts, llm: noLLM });
+  assert.equal(r.intent, 'compound');
+  assert.match(r.reply, /Current filter|match/i);        // search part
+  assert.match(r.reply, /median|sales|No recent/i);       // market part
+  assert.ok((r.skill ?? '').includes('+'), 'composed multiple skills');
+});
+t('single intent does NOT trigger the planner', async () => {
+  const r = await orchestrate('u', '在 Irvine 找 3 居室 200万以下', { ...opts, llm: noLLM });
+  assert.equal(r.intent, 'search');                       // stays single, no compound
+});
+t('"days on market" question does NOT falsely plan (substring trap)', async () => {
+  const r = await orchestrate('u', 'what is days on market?', { ...opts, llm: noLLM });
+  assert.equal(r.intent, 'knowledge');                    // not market, not compound
+});
+
 t('compound: search + price validate chained', async () => {
   const r = await orchestrate('u', '帮我在 Irvine 找 3 居室，顺便看看贵不贵', opts);
   assert.equal(r.intent, 'compound');

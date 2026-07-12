@@ -6,6 +6,7 @@
  */
 import { classifyIntent, type Intent } from './intent.js';
 import { buildRegistry } from './skills.js';
+import { maybePlan, executePlan } from './planner.js';
 import { handleDraftCommand } from './draftCommands.js';
 import { pythonBridge, type PythonBridge } from './bridge.js';
 import type { SkillRegistry } from './skill.js';
@@ -79,6 +80,15 @@ export async function orchestrate(
       skill: 'search+validate',
       reply: `${search.reply}\n\n💰 Top result price check: ${verdict}`,
     };
+  }
+
+  // multi-skill planner (gated) — when the query wants several registry skills at once.
+  // A constrained plan-then-execute, NOT an autonomous loop; skills keep their own locks.
+  const plan = await maybePlan(message, cls.filter, registry, llm);
+  if (plan) {
+    logger.info('multi-skill plan', { userId, plan });
+    const { reply, skills } = await executePlan(plan, ctx, registry);
+    return { intent: 'compound', skill: skills.join('+'), reply };
   }
 
   const skill = registry.get(cls.intent);

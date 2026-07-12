@@ -13,6 +13,7 @@
  *   npm run serve         # listens on ORCH_PORT (default 8100)
  *   curl -s localhost:8100/orchestrate -d '{"userId":"+1","message":"Irvine 行情"}'
  */
+import 'dotenv/config';
 import { createServer } from 'node:http';
 import { orchestrate } from '../orchestrator/orchestrate.js';
 import { RateLimiter } from '../whatsapp/handler.js';
@@ -20,6 +21,10 @@ import { logger } from '../logger.js';
 
 const PORT = Number(process.env.ORCH_PORT ?? 8100);
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
+// Shared secret with the OpenClaw plugin. When set, only callers presenting it may
+// invoke /orchestrate — so a random local process can't forge a request with a spoofed
+// userId (which would bypass OpenClaw's sender authentication and break 丙).
+const AUTH_TOKEN = (process.env.ORCH_TOKEN ?? '').trim();
 
 // Protects OUR resources (DB/LLM/retrieval) — 20 requests/min per user.
 const limiter = new RateLimiter(20, 60_000);
@@ -58,6 +63,13 @@ const server = createServer(async (req, res) => {
     return;
   }
   if (req.method === 'POST' && req.url === '/orchestrate') {
+    // auth: reject anything not carrying the shared token (only the plugin has it)
+    if (AUTH_TOKEN && req.headers.authorization !== `Bearer ${AUTH_TOKEN}`) {
+      logger.warn('orchestrate unauthorized request rejected');
+      res.writeHead(401, JSON_HEADERS);
+      res.end(JSON.stringify({ error: 'unauthorized' }));
+      return;
+    }
     let userId = 'anon';
     try {
       const body = JSON.parse(await readBody(req) || '{}');
@@ -103,4 +115,7 @@ const server = createServer(async (req, res) => {
   res.writeHead(404); res.end();
 });
 
-server.listen(PORT, () => logger.info('orchestrate server listening', { port: PORT }));
+// bind to loopback only — not reachable from other machines on the network
+server.listen(PORT, '127.0.0.1', () =>
+  logger.info('orchestrate server listening', { port: PORT, host: '127.0.0.1', auth: AUTH_TOKEN ? 'token required' : 'OPEN — set ORCH_TOKEN' }),
+);

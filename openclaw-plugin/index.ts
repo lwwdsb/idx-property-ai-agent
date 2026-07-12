@@ -10,6 +10,8 @@
 import { Type } from '@sinclair/typebox';
 
 const ORCH_URL = process.env.ORCH_URL ?? 'http://localhost:8100';
+// shared secret proving this request came from us (not a random local process)
+const ORCH_TOKEN = (process.env.ORCH_TOKEN ?? '').trim();
 
 const idxTool = {
   name: 'ask_idx_assistant',
@@ -26,7 +28,10 @@ const idxTool = {
     try {
       const res = await fetch(`${ORCH_URL}/orchestrate`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: {
+          'content-type': 'application/json',
+          ...(ORCH_TOKEN ? { authorization: `Bearer ${ORCH_TOKEN}` } : {}),
+        },
         body: JSON.stringify({ userId: params.userId ?? 'whatsapp', message: params.message }),
         signal: AbortSignal.timeout(60_000),
       });

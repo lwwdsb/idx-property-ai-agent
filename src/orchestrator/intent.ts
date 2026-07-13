@@ -39,7 +39,17 @@ export const EMAIL_RE = /\be-?mail\b|发邮件|发送邮件|邮件发给|[^@\s]+
 const VALUE_RE = /\b(priced? (fair|right|well)|worth it|good deal|overpriced|underpriced|fair price|is it worth)\b|贵不贵|值不值|合理吗|价格合理|划算/i;
 
 export async function classifyIntent(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
-  const parsed = await parseQuery(message, { llm: opts.llm, isKnownCity });
+  // Cheap regex-only parse first (no LLM). City-agnostic intents (email / knowledge /
+  // recommend) are decided from this alone — they don't need a city, so we never pay for
+  // an LLM parse just to "recover a missing city" for them. Only a search/market-type
+  // message that still lacks a city escalates to the LLM.
+  const regexParsed = await parseQuery(message, { isKnownCity });
+  const cityAgnostic = EMAIL_RE.test(message)
+    || (KNOWLEDGE_RE.test(message) && !regexParsed.filter.city)
+    || RECOMMEND_RE.test(message);
+  const parsed = (!cityAgnostic && !regexParsed.filter.city && opts.llm?.available)
+    ? await parseQuery(message, { llm: opts.llm, isKnownCity })
+    : regexParsed;
   const searchable = Boolean(parsed.filter.city);
   const value = VALUE_RE.test(message);
 

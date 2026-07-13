@@ -88,6 +88,15 @@ t('"days on market" definition is knowledge, not market (substring trap)', async
   const r = await orchestrate('u', 'what is days on market?', opts);
   assert.equal(r.intent, 'knowledge');
 });
+t('city-agnostic intents (knowledge/recommend) do NOT trigger an LLM parse', async () => {
+  let parseCalls = 0;
+  const spy: LLMClient = { available: true, async parseFilters() { parseCalls++; return {}; } };
+  const k = await orchestrate('u', 'what does DOM mean?', { ...opts, llm: spy });
+  assert.equal(k.intent, 'knowledge');
+  const rec = await orchestrate('u', '跟第一个类似的房子', { ...opts, llm: spy });
+  assert.equal(rec.intent, 'recommend');
+  assert.equal(parseCalls, 0);                    // no wasted LLM parse for city-agnostic intents
+});
 
 // ---- email drafting (routes, drafts pending, never sends) ----
 t('email intent -> drafts a pending email, does not send', async () => {

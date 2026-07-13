@@ -63,8 +63,8 @@ export const pythonBridge: PythonBridge = {
     return `${r.answer}\n\nSources: ${r.sources.join('; ')}`;
   },
   recommend: async (listingId) => {
-    const r = await post<{ error?: string }>('/recommend', { listing_id: listingId });
-    return r.error ?? JSON.stringify(r);
+    const r = await post<{ reply?: string; error?: string }>('/recommend', { listing_id: listingId });
+    return r.reply ?? r.error ?? 'No recommendations found.';
   },
   validate: async (l) => JSON.stringify(await post('/validate', l)),
   search: async (params) => {

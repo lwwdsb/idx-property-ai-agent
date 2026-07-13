@@ -79,7 +79,7 @@ export async function handleSearchTurn(
   const header = sig?.signal === 'too_many'
     ? `${sig.clarification}\nHere are a few of the ${total}:`
     : `Found ${total} match${total === 1 ? '' : 'es'}. Top ${rows.length}:`;
-  const cards = rows.map(formatListingCard).join('\n\n');
+  const cards = rows.map((r, i) => `${i + 1}. ${formatListingCard(r)}`).join('\n\n');
   const reply = `${filterLine(session.filter)}\n${header}\n\n${cards}`;
 
   return { kind: sig?.signal === 'too_many' ? 'too_many' : 'results', reply, filter: session.filter, rows };

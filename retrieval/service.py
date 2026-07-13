@@ -16,7 +16,7 @@ from pydantic import BaseModel
 
 from common import get_dense
 from rag import RagIndex, answer as rag_answer
-from recommend import validate_price, recommend as do_recommend
+from recommend import validate_price, recommend as do_recommend, format_reco
 from search import hybrid_search, build_filter
 
 # Example utterances per skill — the embedding intent classifier matches a message
@@ -102,7 +102,7 @@ class RecommendReq(BaseModel):
 @app.post("/recommend")
 def recommend(req: RecommendReq):
     try:
-        return do_recommend(req.listing_id)
+        return {"reply": format_reco(do_recommend(req.listing_id))}  # human-readable cards
     except Exception as e:  # Qdrant down etc. — degrade, don't 500
         return {"error": f"recommendation unavailable: {e}"}
 

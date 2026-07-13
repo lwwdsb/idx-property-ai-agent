@@ -73,6 +73,12 @@ t('routes recommend query -> recommend skill via bridge', async () => {
   assert.equal(r.intent, 'recommend');
   assert.match(r.reply, /RECS_FOR 1174456906/);
 });
+t('recommend by reference ("跟第一个类似的") resolves from last search', async () => {
+  await orchestrate('refuser', '在 Irvine 找 3 居室 200万以下', opts);   // seeds lastResults
+  const r = await orchestrate('refuser', '跟第一个类似的房子', opts);
+  assert.equal(r.intent, 'recommend');
+  assert.match(r.reply, /RECS_FOR \d+/);                                 // resolved to a real id, no raw id typed
+});
 t('routes knowledge question -> RAG via bridge', async () => {
   const r = await orchestrate('u', 'what does DOM mean?', opts);
   assert.equal(r.intent, 'knowledge');

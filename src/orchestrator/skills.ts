@@ -4,6 +4,7 @@
  * (recommend, knowledge) go through the bridge. The router dispatches by intent.
  */
 import { handleSearchTurn } from '../agent/conversation.js';
+import { defaultSessionStore, freshSession } from '../agent/session.js';
 import { getMarketStats, formatMarketStats } from '../market/marketStats.js';
 import { formatListingCard, type ListingRow } from '../search/listingRow.js';
 import { summarizeFilter, type SearchFilter } from '../search/filters.js';
@@ -21,6 +22,40 @@ const TYPE_DB: Record<string, string> = {
 function extractId(message: string): number | undefined {
   const m = message.match(/\b(\d{6,})\b/);
   return m ? Number(m[1]) : undefined;
+}
+
+const CN_NUM: Record<string, number> = { 一: 1, 二: 2, 两: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10 };
+/** "第2个" / "#3" / "the first" -> a 1-based position. */
+function ordinalOf(message: string): number | undefined {
+  let m: RegExpMatchArray | null;
+  if ((m = message.match(/第\s*([一二两三四五六七八九十]|\d+)\s*(?:个|套|条|间)?/))) {
+    return /\d/.test(m[1]!) ? Number(m[1]) : CN_NUM[m[1]!];
+  }
+  if ((m = message.match(/#\s*(\d+)/))) return Number(m[1]);
+  for (const [re, n] of [[/\b(first|1st)\b/i, 1], [/\b(second|2nd)\b/i, 2], [/\b(third|3rd)\b/i, 3],
+                         [/\b(fourth|4th)\b/i, 4], [/\b(fifth|5th)\b/i, 5]] as Array<[RegExp, number]>) {
+    if (re.test(message)) return n;
+  }
+  return undefined;
+}
+/** Resolve "跟第一个/那套 Canterbury 类似的" against the last shown listings -> a listing id. */
+function resolveListingRef(message: string, rows?: ListingRow[]): number | undefined {
+  if (!rows?.length) return undefined;
+  const ord = ordinalOf(message);
+  if (ord && rows[ord - 1]) return rows[ord - 1]!.id;
+  for (const r of rows) {                                   // else match an address token
+    for (const w of (r.address ?? '').split(/\s+/)) {
+      if (w.length >= 3 && /[A-Za-z]/.test(w) && message.includes(w)) return r.id;
+    }
+  }
+  return undefined;
+}
+
+/** Persist the just-shown listings so a later "跟第一个类似的" can reference them. */
+async function rememberResults(userId: string, rows: ListingRow[]): Promise<void> {
+  const s = (await defaultSessionStore.get(userId)) ?? freshSession();
+  s.lastResults = rows;
+  await defaultSessionStore.set(userId, s);
 }
 
 function extractEmails(message: string): string[] {
@@ -59,7 +94,7 @@ function toListingRow(s: SemanticListing): ListingRow {
 }
 
 function formatSemanticResults(results: SemanticListing[], filter: SearchFilter, semantic: string): string {
-  const cards = results.map((r) => formatListingCard(toListingRow(r))).join('\n\n');
+  const cards = results.map((r, i) => `${i + 1}. ${formatListingCard(toListingRow(r))}`).join('\n\n');
   return `🔎 ${summarizeFilter(filter)}  ·  semantic: "${semantic}"\nTop ${results.length} by relevance:\n\n${cards}`;
 }
 
@@ -84,6 +119,8 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
               k: 5,
             });
             if (results.length) {
+              const rows = results.map(toListingRow);
+              await rememberResults(ctx.userId, rows);   // so "跟第一个类似的" can reference these
               return { skill: 'search', reply: formatSemanticResults(results, ctx.filter, semantic), data: { semantic: true, results } };
             }
             // no semantic matches -> fall through to structured search
@@ -109,11 +146,17 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
     })
     .register({
       name: 'recommend', parallelSafe: true,
-      description: 'Given a listing you like (by id/MLS), recommend similar homes with a price check.',
+      description: 'Recommend homes similar to one the user references — by position ("the first one" / "第2个"), address, or an explicit MLS id — with a price check.',
       async run(ctx) {
-        const id = extractId(ctx.message);
+        // resolve WITHOUT making the user type a raw id: an explicit id, else a reference
+        // ("第一个" / an address) into the last shown listings (session memory).
+        let id = extractId(ctx.message);
         if (!id) {
-          return { skill: 'recommend', reply: 'Which listing? Send its id / MLS number.' };
+          const session = await defaultSessionStore.get(ctx.userId);
+          id = resolveListingRef(ctx.message, session?.lastResults);
+        }
+        if (!id) {
+          return { skill: 'recommend', reply: 'Which listing? Search first, then say e.g. "跟第一个类似的" / "more like #2" — or send its MLS number.' };
         }
         return { skill: 'recommend', reply: await bridge.recommend(id) };
       },

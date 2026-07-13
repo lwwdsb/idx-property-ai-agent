@@ -10,9 +10,10 @@
  * only decides WHICH skills run, never bypasses their locks.
  */
 import type { SearchFilter } from '../search/filters.js';
-import type { SkillContext, SkillRegistry } from './skill.js';
+import type { SkillContext, SkillRegistry, SkillResult } from './skill.js';
 import type { LLMClient, PlanStep } from '../llm/client.js';
 import { MARKET_RE, RECOMMEND_RE, KNOWLEDGE_RE, EMAIL_RE } from './intent.js';
+import { logger } from '../logger.js';
 
 // A real "search" needs a constraint beyond city (else "Irvine 行情" would look like
 // search+market). city alone is shared by market/recommend and isn't a search signal.
@@ -58,23 +59,48 @@ export async function maybePlan(
   return plan.length >= 2 ? plan : null;                 // LLM may decide it's really single -> null
 }
 
-/** Run the planned steps in order, each skill on ITS OWN sub-query, compose replies
- * (plan-then-execute, once). The LLM keeps each sub-query self-contained (its own
- * constraints); the semantic-search path also reuses ctx.filter. A lossy sub-query at
- * worst broadens that skill's results (still valid + user-visible), never fabricates. */
+/** Execute a plan (plan-then-execute, once), composing replies in plan order.
+ *
+ * Dependency-aware scheduling: skills are independent by default and run in PARALLEL
+ * (Promise.allSettled — one failing doesn't drop the others, 乙). A skill that declares
+ * `needsPriorResults` consumes other skills' outputs, so it runs AFTER the parallel batch,
+ * sequentially, with those outputs in ctx.priorResults. (Dependent recipes like the
+ * search->price-check compound stay as their own sequential recipe, not via the planner.)
+ * Each skill runs on ITS OWN sub-query; the LLM keeps it self-contained. */
 export async function executePlan(
   plan: PlanStep[],
   ctx: SkillContext,
   registry: SkillRegistry,
 ): Promise<{ reply: string; skills: string[] }> {
+  const steps = plan.map((s) => ({ step: s, skill: registry.get(s.skill) })).filter((x) => x.skill);
+  const independent = steps.filter((x) => !x.skill!.needsPriorResults);
+  const dependent = steps.filter((x) => x.skill!.needsPriorResults);
+  const done = new Map<string, SkillResult>();
+
+  // independent skills -> parallel (no data dependency between them)
+  const settled = await Promise.allSettled(independent.map((x) => x.skill!.run({ ...ctx, message: x.step.query })));
+  independent.forEach((x, i) => {
+    const r = settled[i]!;
+    if (r.status === 'fulfilled') done.set(x.step.skill, r.value);
+    else logger.warn('plan skill failed', { skill: x.step.skill, error: String(r.reason) });
+  });
+
+  // dependent skills -> sequential, seeing prior outputs
+  for (const x of dependent) {
+    try {
+      const r = await x.skill!.run({ ...ctx, message: x.step.query, priorResults: [...done.values()] });
+      done.set(x.step.skill, r);
+    } catch (e) {
+      logger.warn('plan skill failed', { skill: x.step.skill, error: String(e) });
+    }
+  }
+
+  // compose in the original plan order
   const parts: string[] = [];
   const skills: string[] = [];
-  for (const step of plan) {
-    const skill = registry.get(step.skill);
-    if (!skill) continue;
-    const res = await skill.run({ ...ctx, message: step.query });
-    parts.push(res.reply);
-    skills.push(res.skill);
+  for (const s of plan) {
+    const r = done.get(s.skill);
+    if (r) { parts.push(r.reply); skills.push(r.skill); }
   }
   return { reply: parts.join('\n\n────────\n\n'), skills };
 }

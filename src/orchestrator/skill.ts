@@ -17,6 +17,9 @@ export interface SkillContext {
   filter: SearchFilter;
   /** The configured LLM (so skills' own parsing uses the same fallback). */
   llm?: LLMClient;
+  /** In a multi-skill plan, the outputs of already-run skills — populated only for a
+   * skill that declared `needsPriorResults` (which is why it runs after the parallel batch). */
+  priorResults?: SkillResult[];
 }
 
 export interface SkillResult {
@@ -28,6 +31,10 @@ export interface SkillResult {
 export interface Skill {
   name: string;
   description: string;
+  /** True if this skill consumes other skills' outputs (via ctx.priorResults). The
+   * planner runs independent skills in PARALLEL and these AFTER, sequentially. Default
+   * false = independent = parallel-safe. */
+  needsPriorResults?: boolean;
   run(ctx: SkillContext): Promise<SkillResult>;
 }
 

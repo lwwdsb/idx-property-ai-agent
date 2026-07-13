@@ -66,7 +66,7 @@ function formatSemanticResults(results: SemanticListing[], filter: SearchFilter,
 export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new MySqlDraftStore()): SkillRegistry {
   return new SkillRegistry()
     .register({
-      name: 'search',
+      name: 'search', parallelSafe: true,
       description: 'Search active listings by city, beds/baths, budget, type, pool, or free-text style (e.g. "ocean view craftsman").',
       async run(ctx) {
         // Soft/semantic content -> hybrid (Qdrant: hard filters + dense+BM25).
@@ -97,7 +97,7 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       },
     })
     .register({
-      name: 'market',
+      name: 'market', parallelSafe: true,
       description: 'City market stats: median price, $/sqft, days on market, sold-to-list, trend.',
       async run(ctx) {
         if (!ctx.filter.city) {
@@ -108,7 +108,7 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       },
     })
     .register({
-      name: 'recommend',
+      name: 'recommend', parallelSafe: true,
       description: 'Given a listing you like (by id/MLS), recommend similar homes with a price check.',
       async run(ctx) {
         const id = extractId(ctx.message);
@@ -119,14 +119,14 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       },
     })
     .register({
-      name: 'knowledge',
+      name: 'knowledge', parallelSafe: true,
       description: 'Answer real-estate questions (DOM, $/sqft, comps, field meanings) with sources.',
       async run(ctx) {
         return { skill: 'knowledge', reply: await bridge.rag(ctx.message) };
       },
     })
     .register({
-      name: 'email',
+      name: 'email', parallelSafe: true,
       description: 'Draft an outbound email (e.g. a market report) to a recipient — always pending human approval, never auto-sent.',
       async run(ctx) {
         const recipients = extractEmails(ctx.message);

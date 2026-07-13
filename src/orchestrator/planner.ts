@@ -61,32 +61,32 @@ export async function maybePlan(
 
 /** Execute a plan (plan-then-execute, once), composing replies in plan order.
  *
- * Dependency-aware scheduling: skills are independent by default and run in PARALLEL
- * (Promise.allSettled — one failing doesn't drop the others, 乙). A skill that declares
- * `needsPriorResults` consumes other skills' outputs, so it runs AFTER the parallel batch,
- * sequentially, with those outputs in ctx.priorResults. (Dependent recipes like the
- * search->price-check compound stay as their own sequential recipe, not via the planner.)
- * Each skill runs on ITS OWN sub-query; the LLM keeps it self-contained. */
+ * OPT-IN parallel scheduling (safe by default): only skills explicitly marked
+ * `parallelSafe` run together in a PARALLEL batch (Promise.allSettled — one failing
+ * doesn't drop the others, 乙). Everything else runs SEQUENTIALLY afterwards — so an
+ * unmarked skill (unsure, or dependent on others' output via ctx.priorResults) is never
+ * wrongly parallelized. Each skill runs on ITS OWN sub-query; the LLM keeps it
+ * self-contained. Replies are composed in the original plan order. */
 export async function executePlan(
   plan: PlanStep[],
   ctx: SkillContext,
   registry: SkillRegistry,
 ): Promise<{ reply: string; skills: string[] }> {
   const steps = plan.map((s) => ({ step: s, skill: registry.get(s.skill) })).filter((x) => x.skill);
-  const independent = steps.filter((x) => !x.skill!.needsPriorResults);
-  const dependent = steps.filter((x) => x.skill!.needsPriorResults);
+  const parallel = steps.filter((x) => x.skill!.parallelSafe);
+  const serial = steps.filter((x) => !x.skill!.parallelSafe);   // default: serial (safe)
   const done = new Map<string, SkillResult>();
 
-  // independent skills -> parallel (no data dependency between them)
-  const settled = await Promise.allSettled(independent.map((x) => x.skill!.run({ ...ctx, message: x.step.query })));
-  independent.forEach((x, i) => {
+  // verified-independent skills -> parallel batch
+  const settled = await Promise.allSettled(parallel.map((x) => x.skill!.run({ ...ctx, message: x.step.query })));
+  parallel.forEach((x, i) => {
     const r = settled[i]!;
     if (r.status === 'fulfilled') done.set(x.step.skill, r.value);
     else logger.warn('plan skill failed', { skill: x.step.skill, error: String(r.reason) });
   });
 
-  // dependent skills -> sequential, seeing prior outputs
-  for (const x of dependent) {
+  // everything else -> sequential, able to read prior outputs
+  for (const x of serial) {
     try {
       const r = await x.skill!.run({ ...ctx, message: x.step.query, priorResults: [...done.values()] });
       done.set(x.step.skill, r);

@@ -17,8 +17,8 @@ export interface SkillContext {
   filter: SearchFilter;
   /** The configured LLM (so skills' own parsing uses the same fallback). */
   llm?: LLMClient;
-  /** In a multi-skill plan, the outputs of already-run skills — populated only for a
-   * skill that declared `needsPriorResults` (which is why it runs after the parallel batch). */
+  /** In a multi-skill plan, the outputs of skills already run (the parallel batch +
+   * earlier serial steps). Available to serially-run skills so a dependent one can use them. */
   priorResults?: SkillResult[];
 }
 
@@ -31,10 +31,12 @@ export interface SkillResult {
 export interface Skill {
   name: string;
   description: string;
-  /** True if this skill consumes other skills' outputs (via ctx.priorResults). The
-   * planner runs independent skills in PARALLEL and these AFTER, sequentially. Default
-   * false = independent = parallel-safe. */
-  needsPriorResults?: boolean;
+  /** OPT-IN parallelism: set true ONLY when this skill is verified independent +
+   * concurrency-safe (no shared mutable state, no dependency on other skills' output).
+   * Such skills run together in a PARALLEL batch. Anything left unmarked runs
+   * SEQUENTIALLY (the safe default) after that batch, and can read ctx.priorResults —
+   * so "unsure whether it's safe to parallelize" => don't mark it => serial. */
+  parallelSafe?: boolean;
   run(ctx: SkillContext): Promise<SkillResult>;
 }
 

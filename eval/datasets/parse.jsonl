@@ -1,0 +1,40 @@
+{"id":"prs-001","input":"3 bed 2 bath in San Diego under 900k","label":{"filter":{"city":"San Diego","beds":3,"baths":2,"maxPrice":900000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-002","input":"condo in Los Angeles between 500k and 800k","label":{"filter":{"city":"Los Angeles","propertyType":"condo","minPrice":500000,"maxPrice":800000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-003","input":"single family home in Tustin over 1m","label":{"filter":{"city":"Tustin","propertyType":"single-family","minPrice":1000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-004","input":"在 Irvine 找 3 居室带泳池、250万以下","label":{"filter":{"city":"Irvine","beds":3,"pool":true,"maxPrice":2500000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-005","input":"在 San Jose 找 200万以上的独栋","label":{"filter":{"city":"San Jose","propertyType":"single-family","minPrice":2000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-006","input":"four bedroom house in Pasadena","label":{"filter":{"city":"Pasadena","beds":4},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-007","input":"4br 3ba in Anaheim under 1.5m","label":{"filter":{"city":"Anaheim","beds":4,"baths":3,"maxPrice":1500000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-008","input":"single family home with at least 2000 sqft in Irvine","label":{"filter":{"city":"Irvine","propertyType":"single-family","minSqft":2000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-009","input":"townhouse over 1m near Pasadena","label":{"filter":{"city":"Pasadena","propertyType":"townhouse","minPrice":1000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-010","input":"尔湾行情","label":{"filter":{"city":"Irvine"},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-011","input":"在圣地亚哥找 3 居室 200万以下","label":{"filter":{"city":"San Diego","beds":3,"maxPrice":2000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-012","input":"在 Irvine 找 3 居室不要泳池","label":{"filter":{"city":"Irvine","beds":3,"pool":false},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-013","input":"3 bed in Irvine without a pool","label":{"filter":{"city":"Irvine","beds":3,"pool":false},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-014","input":"find me a family home in irvine for under a million","label":{"filter":{"city":"Irvine","maxPrice":1000000},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-015","input":"homes under 1m in the bay area","label":{"filter":{"maxPrice":1000000},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-016","input":"3 bedroom under 1M","label":{"filter":{"beds":3,"maxPrice":1000000},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-017","input":"在 Tustin 找 3 居室 town home 200万以下","label":{"filter":{"city":"Tustin","beds":3,"propertyType":"townhouse","maxPrice":2000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-018","input":"洛杉矶 5 居室以上的房子","label":{"filter":{"city":"Los Angeles","beds":5},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-019","input":"3 居室带车库 Irvine 150万到250万","label":{"filter":{"city":"Irvine","beds":3,"minPrice":1500000,"maxPrice":2500000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-020","input":"在洛杉矶找 condo 100万以下","label":{"filter":{"city":"Los Angeles","propertyType":"condo","maxPrice":1000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-021","input":"want a condo in cupertino around two million at least 3 beds","label":{"filter":{"city":"Cupertino","propertyType":"condo","beds":3,"maxPrice":2000000},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-022","input":"San Jose 200万以上的房子","label":{"filter":{"city":"San Jose","minPrice":2000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-023","input":"在钻石吧找带泳池的独栋","label":{"filter":{"city":"Diamond Bar","propertyType":"single-family","pool":true},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-024","input":"cozy family place","label":{"filter":{},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-025","input":"在 Gotham City 找 3 居室","label":{"filter":{"beds":3},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-026","input":"在 USC 附近找便宜的房子","label":{"filter":{},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-027","input":"5 bedroom under 500k in Irvine with a pool","label":{"filter":{"city":"Irvine","beds":5,"maxPrice":500000,"pool":true},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-028","input":"帮我在富勒顿找 4 居室 3 卫","label":{"filter":{"city":"Fullerton","beds":4,"baths":3},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-029","input":"Beverly Hills 行情怎么样","label":{"filter":{"city":"Beverly Hills"},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-030","input":"condos in Long Beach","label":{"filter":{"city":"Long Beach","propertyType":"condo"},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-031","input":"在 Irvine 找不带泳池的 4 居室 300万以下","label":{"filter":{"city":"Irvine","beds":4,"pool":false,"maxPrice":3000000},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-032","input":"in San Gabriel 2000 sqft or more","label":{"filter":{"city":"San Gabriel","minSqft":2000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-033","input":"3 bd 2 ba condo in Tustin under 750k","label":{"filter":{"city":"Tustin","beds":3,"baths":2,"propertyType":"condo","maxPrice":750000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-034","input":"looking for something in anaheim around 900k","label":{"filter":{"city":"Anaheim","maxPrice":900000},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-035","input":"帮我找个大点的房子 500万预算","label":{"filter":{"maxPrice":5000000},"escalate":true},"meta":{"source":"human","verified":true}}
+{"id":"prs-036","input":"townhome in Arcadia between 1m and 2m","label":{"filter":{"city":"Arcadia","propertyType":"townhouse","minPrice":1000000,"maxPrice":2000000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-037","input":"在洛杉矶 200万以上带泳池","label":{"filter":{"city":"Los Angeles","minPrice":2000000,"pool":true},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-038","input":"three bedroom two bath in Fullerton under 800k","label":{"filter":{"city":"Fullerton","beds":3,"baths":2,"maxPrice":800000},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-039","input":"在圣何塞找 condo","label":{"filter":{"city":"San Jose","propertyType":"condo"},"escalate":false},"meta":{"source":"human","verified":true}}
+{"id":"prs-040","input":"single family in Pasadena at least 4 beds under 2.5m","label":{"filter":{"city":"Pasadena","propertyType":"single-family","beds":4,"maxPrice":2500000},"escalate":false},"meta":{"source":"human","verified":true}}

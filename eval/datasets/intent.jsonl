@@ -1,0 +1,90 @@
+{"id":"int-001","input":"在 Irvine 找 3 居室 200万以下","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-002","input":"3 bed 2 bath in San Diego under 900k","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-003","input":"condos in Los Angeles between 500k and 800k","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-004","input":"townhouse over 1m near Pasadena","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-005","input":"在圣地亚哥找带泳池的独栋 300万以下","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-006","input":"find me a nice family home in irvine for under a million","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-007","input":"looking for a 4 bedroom with a big backyard in Tustin","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-008","input":"ocean view home in Malibu","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-009","input":"尔湾找个安静点的工匠风老宅","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-010","input":"show me listings in Fullerton with solar panels","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-011","input":"在 Irvine 找 3 居室不要泳池","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-012","input":"apartments near the beach in Long Beach","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-013","input":"洛杉矶 5 居室以上的房子","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-014","input":"single family home with at least 2000 sqft in Irvine","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-015","input":"帮我在 Tustin 找个学区好的房子","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-016","input":"3 bedroom under 1M","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-017","input":"cul-de-sac home with an ADU in Arcadia","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-018","input":"有没有 Irvine 带三车库的房子","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-019","input":"remodeled kitchen homes in San Gabriel under 2m","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-020","input":"want a condo in cupertino around two million at least 3 beds","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-021","input":"Irvine 行情怎么样","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-022","input":"尔湾房价涨了吗","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-023","input":"median sold price in San Diego","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-024","input":"how's the housing market in Tustin","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-025","input":"price per square foot in Pasadena","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-026","input":"洛杉矶的均价是多少","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-027","input":"are prices going up in Fullerton","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-028","input":"San Jose 的房价走势","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-029","input":"what's the average price in Long Beach","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-030","input":"Irvine 这个城市最近成交怎么样","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-031","input":"give me the lay of the land in Irvine","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-032","input":"跟第一个类似的房子","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-033","input":"more like #2","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-034","input":"show me similar homes to that one","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-035","input":"跟这套差不多的还有哪些","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-036","input":"recommend comparable properties to the Canterbury one","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-037","input":"有没有和这个类似的推荐","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-038","input":"anything like the third listing","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-039","input":"跟 1174456906 类似的","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-040","input":"什么是 DOM","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-041","input":"what does days on market mean","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-042","input":"how is the sold to list ratio calculated","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-043","input":"什么是 comp","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-044","input":"卧室存在哪个字段","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-045","input":"explain price per square foot","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-046","input":"成交挂牌比怎么算的","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-047","input":"what does contingent status mean","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-048","input":"how many comps do you need to judge a price","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-049","input":"email the Irvine market report to client@example.com","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-050","input":"发邮件把 Tustin 行情发给 agent@firm.com","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-051","input":"send the San Diego report to buyer@gmail.com","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-052","input":"把这个行情邮件发给 a@b.com 和 c@d.com","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-053","input":"can you email lisa@realty.com the Pasadena market update","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-054","input":"在 Irvine 找 3 居室,再看看这个城市的行情","label":{"intents":["search","market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-055","input":"find a 4 bed in Tustin and tell me how the market is there","label":{"intents":["search","market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-056","input":"帮我在圣地亚哥找带泳池的房子,顺便看看房价涨了没","label":{"intents":["search","market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-057","input":"show me condos in Long Beach and the median price there","label":{"intents":["search","market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-058","input":"帮我在 Irvine 找 3 居室,顺便看看贵不贵","label":{"intents":["compound"]},"meta":{"source":"human","verified":true}}
+{"id":"int-059","input":"find a home in Tustin and is it a good deal","label":{"intents":["compound"]},"meta":{"source":"human","verified":true}}
+{"id":"int-060","input":"hello there","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-061","input":"你好","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-062","input":"thanks that's helpful","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-063","input":"asdf qwer zxcv","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-064","input":"what's the weather today","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-065","input":"帮我算下房贷月供","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-066","input":"3 居室带车库 Irvine 150万到250万","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-067","input":"is now a good time to buy in Irvine","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-068","input":"跟刚才那套 Canterbury 类似的","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-069","input":"how do you calculate days on market and show me Irvine's","label":{"intents":["knowledge","market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-070","input":"在 Tustin 找 3 居室 town home 200万以下","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-071","input":"what neighborhoods in San Diego have good schools","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-072","input":"Irvine 中位价多少","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-073","input":"send it to my client at bob@acme.co","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-074","input":"跟第 2 个类似的,再看看那个城市行情","label":{"intents":["recommend","market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-075","input":"find me something with an ocean view under 3m in Dana Point","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-076","input":"是不是快涨了 Irvine","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-077","input":"what is a contingency","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-078","input":"在洛杉矶找 condo 100万以下","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-079","input":"recommend homes like this and email them to me at me@x.com","label":{"intents":["recommend","email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-080","input":"how fast are homes selling in Fullerton","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-081","input":"a cozy place near the water","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-082","input":"给我看看 Pasadena 的房子和行情","label":{"intents":["search","market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-083","input":"what does pending mean vs contingent","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-084","input":"4br 3ba in Anaheim under 1.5m","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-085","input":"这套值不值这个价","label":{"intents":["compound"]},"meta":{"source":"human","verified":true}}
+{"id":"int-086","input":"similar to the first and are they overpriced","label":{"intents":["recommend"]},"meta":{"source":"human","verified":true}}
+{"id":"int-087","input":"在钻石吧找带泳池的独栋","label":{"intents":["search"]},"meta":{"source":"human","verified":true}}
+{"id":"int-088","input":"how's appreciation been in Arcadia","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
+{"id":"int-089","input":"什么是 escrow","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
+{"id":"int-090","input":"email the report","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}

@@ -10,7 +10,7 @@ include $(ENV_FILE)
 export
 endif
 
-.PHONY: help db-up db-down import indexes check rebuild
+.PHONY: help db-up db-down import indexes check rebuild up down eval eval-datasets
 
 help:           ## show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(firstword $(MAKEFILE_LIST)) | \
@@ -39,3 +39,15 @@ up:             ## start the full local stack (MySQL, Qdrant, services)
 
 down:           ## stop the app services (orchestrate + retrieval)
 	bash scripts/stop-local.sh
+
+eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant + LLM key)
+	python eval/metrics/test_metrics.py
+	npx tsx eval/runners/evalIntentParse.ts
+	python eval/runners/report_intent_parse.py
+	python eval/runners/eval_retrieval.py
+	python eval/runners/eval_rag.py
+	python eval/runners/make_report.py
+	@echo "\n==> eval/report.md"
+
+eval-datasets:  ## rebuild the LLM-assisted labeled sets (retrieval); needs Qdrant + LLM key
+	python eval/runners/build_retrieval_set.py

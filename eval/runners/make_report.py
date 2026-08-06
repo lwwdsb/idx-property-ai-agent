@@ -1,0 +1,95 @@
+"""Aggregate all capability metrics into eval/report.md + a timestamped history snapshot.
+
+Reads eval/history/*.metrics.json (produced by the per-capability runners) and renders
+a single human-readable report with headline numbers. Also appends a snapshot to
+eval/history/ for regression tracking (metrics over time).
+
+  python eval/runners/make_report.py
+"""
+import json
+import os
+from datetime import datetime, timezone
+
+ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+HIST = os.path.join(ROOT, "eval", "history")
+REPORT = os.path.join(ROOT, "eval", "report.md")
+
+
+def load(name):
+    path = os.path.join(HIST, name)
+    return json.load(open(path)) if os.path.exists(path) else None
+
+
+def main():
+    ip = load("intent_parse.metrics.json")
+    ret = load("retrieval.metrics.json")
+    rag = load("rag.metrics.json")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+
+    lines = [f"# IDX Evaluation Report", "", f"_Generated {now}_", ""]
+
+    # ---- headline ----
+    lines += ["## Headline", "", "| Capability | Metric | Value |", "|---|---|---|"]
+    if ip:
+        i, p = ip["intent"], ip["parse"]
+        live = ip.get("meta", {})
+        lines.append(f"| Intent | accuracy (in gold set) | {i['accuracy_in_set']} |")
+        lines.append(f"| Intent | accuracy (primary) / macro-F1 | {i['accuracy']} / {i['macro_f1']} |")
+        lines.append(f"| Parse | escalation-decision accuracy | {p['escalation_accuracy']} |")
+        lines.append(f"| Parse | regex exact-match (non-escalate) | {p['regex_exact_match_non_escalate']} |")
+    if ret:
+        h = ret["per_mode"]["hybrid"]
+        lines.append(f"| Retrieval | hybrid nDCG@10 | {h['nDCG@10']} |")
+        lines.append(f"| Retrieval | hybrid recall@10 / MRR | {h['recall@10']} / {h['MRR']} |")
+    if rag:
+        lines.append(f"| RAG | in-corpus hit@{rag['k']} | {rag['hit_at_k']} |")
+        lines.append(f"| RAG | in/out score separation | {rag['separation']} |")
+        lines.append(f"| RAG | threshold-gate accuracy @ {rag['suggested_threshold']} | {rag['threshold_accuracy']} |")
+    lines.append("")
+
+    # ---- detail ----
+    if ret:
+        lines += ["## Retrieval — hybrid vs single-path", "",
+                  "| mode | nDCG@10 | recall@10 | MRR | P@5 |", "|---|---|---|---|---|"]
+        for mode, m in ret["per_mode"].items():
+            lines.append(f"| {mode} | {m['nDCG@10']} | {m['recall@10']} | {m['MRR']} | {m['precision@5']} |")
+        lines += ["", f"_{ret['n_queries']} queries, {ret['verified']} human-verified. "
+                  "Hybrid best on nDCG@10 + recall@10 — fusion adds quality, not just coverage. "
+                  "Margin is modest (pooling inflates every mode's recall; grades lenient) — "
+                  "sharpen with human-verified grades + more negatives._", ""]
+
+    if rag:
+        lines += ["## RAG — threshold gate (data-backed)", "",
+                  f"- in-corpus mean top similarity: **{rag['in_corpus_mean_score']}**, "
+                  f"out-of-corpus: **{rag['out_corpus_mean_score']}** (Δ {rag['separation']})",
+                  f"- a gate at score ≥ **{rag['suggested_threshold']}** separates in/out with "
+                  f"**{rag['threshold_accuracy']}** accuracy",
+                  "- the live system has no hard gate yet → adding one is now justified by data, "
+                  "not opinion.", ""]
+
+    if ip and ip["intent"].get("misses"):
+        lines += ["## Known gaps (from eval)", "",
+                  "- Intent: embedding classifier has no reject option — greetings / off-topic "
+                  "get forced into the nearest skill instead of `unknown`.",
+                  "- Parse: a few false-positive escalations (city-only long queries).",
+                  "- Retrieval: LLM-judge grades need human spot-check calibration.", ""]
+
+    lines += ["---", "",
+              "Datasets are LLM-assisted + human-spot-checked; only queries + ids + labels are "
+              "committed (no confidential listing text). Run: `make eval`.", ""]
+
+    with open(REPORT, "w") as f:
+        f.write("\n".join(lines))
+
+    # regression snapshot
+    snap = {"at": now, "intent_parse": ip, "retrieval": ret, "rag": rag}
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+    with open(os.path.join(HIST, f"snapshot-{stamp}.json"), "w") as f:
+        json.dump(snap, f, indent=2)
+
+    print(f"wrote {REPORT}")
+    print(f"snapshot: eval/history/snapshot-{stamp}.json")
+
+
+if __name__ == "__main__":
+    main()

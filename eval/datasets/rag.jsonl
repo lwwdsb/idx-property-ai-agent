@@ -1,0 +1,30 @@
+{"id":"rag-001","input":"what does days on market mean","label":{"in_corpus":true,"gold_source":"Days on Market"},"meta":{"source":"human","verified":true}}
+{"id":"rag-002","input":"how is price per square foot calculated","label":{"in_corpus":true,"gold_source":"Price per Square Foot"},"meta":{"source":"human","verified":true}}
+{"id":"rag-003","input":"what is the list to sold ratio","label":{"in_corpus":true,"gold_source":"List-to-Sold"},"meta":{"source":"human","verified":true}}
+{"id":"rag-004","input":"what are comparable sales","label":{"in_corpus":true,"gold_source":"Comparable Sales"},"meta":{"source":"human","verified":true}}
+{"id":"rag-005","input":"how many comps do you need to judge pricing","label":{"in_corpus":true,"gold_source":"Comparable Sales"},"meta":{"source":"human","verified":true}}
+{"id":"rag-006","input":"what does pending status mean","label":{"in_corpus":true,"gold_source":"Listing Status"},"meta":{"source":"human","verified":true}}
+{"id":"rag-007","input":"what is an HOA fee","label":{"in_corpus":true,"gold_source":"HOA Fee"},"meta":{"source":"human","verified":true}}
+{"id":"rag-008","input":"what counts as living area","label":{"in_corpus":true,"gold_source":"Living Area"},"meta":{"source":"human","verified":true}}
+{"id":"rag-009","input":"difference between semantic and keyword search","label":{"in_corpus":true,"gold_source":"Semantic vs Keyword"},"meta":{"source":"human","verified":true}}
+{"id":"rag-010","input":"什么是在市天数","label":{"in_corpus":true,"gold_source":"Days on Market"},"meta":{"source":"human","verified":true}}
+{"id":"rag-011","input":"成交挂牌比是什么意思","label":{"in_corpus":true,"gold_source":"List-to-Sold"},"meta":{"source":"human","verified":true}}
+{"id":"rag-012","input":"每平方英尺价格怎么算","label":{"in_corpus":true,"gold_source":"Price per Square Foot"},"meta":{"source":"human","verified":true}}
+{"id":"rag-013","input":"which column stores the number of bedrooms","label":{"in_corpus":true,"gold_source":"fields.md"},"meta":{"source":"human","verified":true}}
+{"id":"rag-014","input":"which field is the list price","label":{"in_corpus":true,"gold_source":"fields.md"},"meta":{"source":"human","verified":true}}
+{"id":"rag-015","input":"which column has the city","label":{"in_corpus":true,"gold_source":"fields.md"},"meta":{"source":"human","verified":true}}
+{"id":"rag-016","input":"what does active vs sold status mean","label":{"in_corpus":true,"gold_source":"Listing Status"},"meta":{"source":"human","verified":true}}
+{"id":"rag-017","input":"why do you withhold a price verdict sometimes","label":{"in_corpus":true,"gold_source":"Comparable Sales"},"meta":{"source":"human","verified":true}}
+{"id":"rag-018","input":"what is $/sqft","label":{"in_corpus":true,"gold_source":"Price per Square Foot"},"meta":{"source":"human","verified":true}}
+{"id":"rag-019","input":"what field is the living area","label":{"in_corpus":true,"gold_source":"fields.md"},"meta":{"source":"human","verified":true}}
+{"id":"rag-020","input":"什么是 comp","label":{"in_corpus":true,"gold_source":"Comparable Sales"},"meta":{"source":"human","verified":true}}
+{"id":"rag-021","input":"how do I calculate my mortgage monthly payment","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-022","input":"what are current interest rates","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-023","input":"what's the capital of France","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-024","input":"should I buy or rent","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-025","input":"how do I stage a home for sale","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-026","input":"what is the property tax rate in California","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-027","input":"can you recommend a good real estate lawyer","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-028","input":"what will home prices be next year","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-029","input":"how does a 1031 exchange work","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}
+{"id":"rag-030","input":"what credit score do I need for a mortgage","label":{"in_corpus":false,"gold_source":null},"meta":{"source":"human","verified":true}}

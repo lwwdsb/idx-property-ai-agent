@@ -105,3 +105,13 @@ openclaw-plugin/node_modules/
 
 # 学习笔记(本地,不入库)
 learning/
+
+# ─────────────────────────────────────────────────────────────
+# Eval: code + curated datasets (query+id+grade) are committable; anything that
+# embeds confidential listing TEXT (remarks) stays local. Raw candidate pools and
+# per-run history are local-only.
+# ─────────────────────────────────────────────────────────────
+eval/**/*.raw.jsonl
+eval/**/*.pool.jsonl
+eval/history/
+eval/report.md

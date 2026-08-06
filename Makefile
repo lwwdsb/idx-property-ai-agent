@@ -46,6 +46,8 @@ eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant
 	python eval/runners/report_intent_parse.py
 	python eval/runners/eval_retrieval.py
 	python eval/runners/eval_rag.py
+	python eval/runners/tune_retrieval.py
+	python eval/runners/bench_latency.py
 	python eval/runners/make_report.py
 	@echo "\n==> eval/report.md"
 

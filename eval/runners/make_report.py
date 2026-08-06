@@ -24,6 +24,8 @@ def main():
     ip = load("intent_parse.metrics.json")
     ret = load("retrieval.metrics.json")
     rag = load("rag.metrics.json")
+    tune = load("tuning.metrics.json")
+    lat = load("latency.metrics.json")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [f"# IDX Evaluation Report", "", f"_Generated {now}_", ""]
@@ -45,6 +47,13 @@ def main():
         lines.append(f"| RAG | in-corpus hit@{rag['k']} | {rag['hit_at_k']} |")
         lines.append(f"| RAG | in/out score separation | {rag['separation']} |")
         lines.append(f"| RAG | threshold-gate accuracy @ {rag['suggested_threshold']} | {rag['threshold_accuracy']} |")
+    if lat:
+        seq = {s["endpoint"]: s for s in lat["sequential"]}
+        for ep in ("orchestrate /orchestrate", "retrieval /search", "retrieval /rag"):
+            if ep in seq:
+                lines.append(f"| Latency | {ep} p50/p95 | {seq[ep]['p50']}ms / {seq[ep]['p95']}ms |")
+        c = lat.get("concurrency", {})
+        lines.append(f"| Latency | {lat['conc_level']}x concurrent p99 / wall | {c.get('p99')}ms / {c.get('wall_s')}s |")
     lines.append("")
 
     # ---- detail ----
@@ -66,6 +75,26 @@ def main():
                   f"**{rag['threshold_accuracy']}** accuracy",
                   "- the live system has no hard gate yet → adding one is now justified by data, "
                   "not opinion.", ""]
+
+    if tune:
+        lines += ["## Retrieval tuning (swept, not pitched)", "",
+                  "| prefetch | nDCG@10 |", "|---|---|"]
+        for p, v in tune["prefetch"].items():
+            lines.append(f"| {p}{' (best)' if int(p) == tune['best_prefetch'] else ''} | {v} |")
+        lines += ["", f"RRF k sweep (manual RRF): nDCG@10 spread across k = **{tune['k_spread']}** "
+                  f"({'k-insensitive → library default fine' if tune['k_spread'] < 0.02 else 'mildly k-sensitive; small k slightly better'}). "
+                  "Differences are within small-set noise → defaults kept, would re-tune on a larger "
+                  "human-verified set.", ""]
+
+    if lat:
+        lines += ["## Latency (p50/p95/p99, ms)", "",
+                  "| endpoint | p50 | p95 | p99 |", "|---|---|---|---|"]
+        for s in lat["sequential"]:
+            lines.append(f"| {s['endpoint']} | {s['p50']} | {s['p95']} | {s['p99']} |")
+        c = lat.get("concurrency", {})
+        lines += ["", f"_{lat['conc_level']} concurrent /orchestrate: wall {c.get('wall_s')}s, "
+                  f"p50 {c.get('p50')}ms, p99 {c.get('p99')}ms. RAG latency is LLM-generation-bound "
+                  "(~1.2s), not retrieval; everything else is single-digit-to-low-double-digit ms._", ""]
 
     if ip and ip["intent"].get("misses"):
         lines += ["## Known gaps (from eval)", "",

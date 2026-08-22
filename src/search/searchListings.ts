@@ -41,7 +41,9 @@ const SELECT_LISTINGS = `SELECT
   ${col('price', RP)}        AS price,
   ${col('photoCount', RP)}   AS photoCount,
   ${col('yearBuilt', RP)}    AS yearBuilt,
-  ${col('pool', RP)}         AS pool
+  ${col('pool', RP)}         AS pool,
+  ${col('latitude', RP)}     AS lat,
+  ${col('longitude', RP)}    AS lng
 FROM ${RP}`;
 
 function buildWhere(f: SearchFilter): { sql: string; params: unknown[] } {

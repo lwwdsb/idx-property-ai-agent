@@ -8,6 +8,7 @@ import { defaultSessionStore, freshSession } from '../agent/session.js';
 import { getMarketStats, formatMarketStats } from '../market/marketStats.js';
 import { formatListingCard, type ListingRow } from '../search/listingRow.js';
 import { summarizeFilter, type SearchFilter } from '../search/filters.js';
+import { getMapsClient, type MapsClient } from '../maps/mapsClient.js';
 import { MySqlDraftStore, type DraftStore } from '../email/drafts.js';
 import { draftEmail, previewDraft } from '../email/email.js';
 import { weeklyMarketReport } from '../email/templates.js';
@@ -84,12 +85,38 @@ export function extractSemanticText(message: string, filter: SearchFilter): stri
   return content.length >= 1 ? s : '';
 }
 
+/** Apply a proximity constraint to listings via the maps client (CODE-driven: only
+ * called because filter.proximity exists). Geocodes the destination, computes commute
+ * for listings that have coordinates, annotates commuteMinutes, filters by withinMinutes
+ * (if given) and sorts by commute. Degrades to the original rows on any failure (乙). */
+export async function applyProximity(
+  rows: ListingRow[],
+  prox: NonNullable<SearchFilter['proximity']>,
+  maps: MapsClient = getMapsClient(),   // injectable for tests
+): Promise<ListingRow[]> {
+  if (!maps.available) return rows;                       // no key -> skip silently
+  const dest = await maps.geocode(prox.to);
+  if (!dest) return rows;                                 // can't resolve destination -> skip
+  const geo = rows.filter((r) => r.lat != null && r.lng != null);
+  if (!geo.length) return rows;
+  const commutes = await maps.commuteMinutes(
+    geo.map((r) => ({ id: r.id, lat: r.lat!, lng: r.lng! })), dest, prox.mode ?? 'driving');
+  const byId = new Map(commutes.map((c) => [c.id, c.minutes]));
+  let out = rows.map((r) => ({ ...r, commuteMinutes: byId.get(r.id) ?? null }));
+  if (prox.withinMinutes != null) {
+    out = out.filter((r) => r.commuteMinutes != null && r.commuteMinutes <= prox.withinMinutes!);
+  }
+  out.sort((a, b) => (a.commuteMinutes ?? Infinity) - (b.commuteMinutes ?? Infinity));
+  return out;
+}
+
 function toListingRow(s: SemanticListing): ListingRow {
   return {
     id: s.listing_id ?? 0, listingId: null, mls: s.mls ?? null, address: s.address ?? null,
     city: s.city ?? null, zip: null, type: s.type ?? null, beds: s.beds ?? null,
     baths: s.baths ?? null, sqft: s.sqft ?? null, price: s.price ?? null,
     photoCount: null, yearBuilt: null, pool: s.pool ?? false,
+    lat: null, lng: null,
   };
 }
 
@@ -130,6 +157,18 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
         }
         // Pure structured (or fallback): multi-turn MySQL search (LLM-aware parse).
         const turn = await handleSearchTurn(ctx.userId, ctx.message, { llm: ctx.llm });
+        // proximity: CODE decides to call maps because the slot exists (not the LLM).
+        if (ctx.filter.proximity && turn.rows?.length) {
+          const ranked = await applyProximity(turn.rows, ctx.filter.proximity);
+          if (ranked.length) {
+            const cards = ranked.map((r, i) => {
+              const c = r.commuteMinutes != null ? `  ⏱ ${r.commuteMinutes}min to ${ctx.filter.proximity!.to}` : '';
+              return `${i + 1}. ${formatListingCard(r)}${c}`;
+            }).join('\n\n');
+            const head = `🔎 ${summarizeFilter(ctx.filter)}\nTop ${ranked.length} by commute:`;
+            return { skill: 'search', reply: `${head}\n\n${cards}`, data: { ...turn, rows: ranked, proximity: true } };
+          }
+        }
         return { skill: 'search', reply: turn.reply, data: turn };
       },
     })

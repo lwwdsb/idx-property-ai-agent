@@ -75,6 +75,23 @@ t('中文: city aliases resolve (尔湾 -> Irvine)', async () => {
   assert.equal((await parseQuery('在圣地亚哥找 3 居室 200万以下')).filter.city, 'San Diego');
 });
 
+// ---- proximity slot extraction ----
+t('EN: "within 30 min of downtown LA" -> proximity slot', () => {
+  const f = regexParse('3 bed within 30 min of downtown LA');
+  assert.equal(f.beds, 3);
+  assert.equal(f.proximity?.to, 'downtown LA');
+  assert.equal(f.proximity?.withinMinutes, 30);
+});
+t('中文: "距 XX 公司 30 分钟车程" -> proximity + driving', () => {
+  const f = regexParse('在 Irvine 找 3 居室 距 Google 公司 30 分钟车程');
+  assert.equal(f.proximity?.to, 'Google 公司');
+  assert.equal(f.proximity?.withinMinutes, 30);
+  assert.equal(f.proximity?.mode, 'driving');
+});
+t('no proximity when none mentioned', () => {
+  assert.equal(regexParse('在 Irvine 找 3 居室 200万以下').proximity, undefined);
+});
+
 // ---- pool is tri-state (negation must not be a false positive) ----
 t('EN: "without a pool" -> pool false', () => {
   const f = regexParse('3 bed in Irvine without a pool');

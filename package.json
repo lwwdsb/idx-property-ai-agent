@@ -16,6 +16,7 @@
     "test:orch": "tsx src/orchestrator/orchestrate.test.ts",
     "test:wa": "tsx src/whatsapp/handler.test.ts",
     "test:email": "tsx src/email/email.test.ts",
+    "test:proximity": "tsx src/maps/proximity.test.ts",
     "test:all": "npm run typecheck && npm run test && npm run eval && npm run test:agent && npm run test:market && npm run test:orch && npm run test:wa && npm run test:email",
     "drafts": "tsx src/cli/drafts.ts",
     "typecheck": "tsc --noEmit",

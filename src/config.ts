@@ -50,6 +50,11 @@ export interface Config {
   retrieval: {
     url: string;
   };
+  /** Google Maps (commute/proximity filtering). Empty key => proximity filtering
+   * silently skipped (乙: search still returns results, just without commute ranking). */
+  maps: {
+    apiKey: string;
+  };
   /** Email agent (Week 11). Outbound always requires human approval. */
   email: {
     from: string;
@@ -85,6 +90,9 @@ export const config: Config = {
   },
   retrieval: {
     url: optional('RETRIEVAL_URL', 'http://localhost:8099'),
+  },
+  maps: {
+    apiKey: optional('GOOGLE_MAPS_API_KEY'),
   },
   email: {
     from: optional('EMAIL_FROM'),

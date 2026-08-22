@@ -44,6 +44,9 @@ const SYSTEM_PROMPT = [
   '- propertyType: one of "condo" | "townhouse" | "single-family"',
   '- pool: boolean',
   '- minSqft: number',
+  '- proximity: object {to: string, withinMinutes?: number, mode?: "driving"|"transit"|"walking"}',
+  '    — set ONLY if the user wants to be near/within a commute of a place',
+  '      (e.g. "within 30 min of downtown LA", "距XX公司30分钟车程").',
   'Note: Chinese 万 = 10,000 (e.g. 150万 = 1500000). No prose, JSON only.',
 ].join('\n');
 
@@ -60,6 +63,16 @@ export function sanitizeFilter(raw: unknown): FilterPatch {
     if (k === 'city' && typeof v === 'string' && v.trim()) out.city = v.trim();
     else if (k === 'propertyType' && typeof v === 'string' && TYPES.has(v)) out.propertyType = v;
     else if (k === 'pool' && typeof v === 'boolean') out.pool = v;
+    else if (k === 'proximity' && typeof v === 'object' && v !== null) {
+      const p = v as Record<string, unknown>;
+      if (typeof p.to === 'string' && p.to.trim()) {
+        const prox: NonNullable<FilterPatch['proximity']> = { to: p.to.trim() };
+        const mins = typeof p.withinMinutes === 'number' ? p.withinMinutes : Number(p.withinMinutes);
+        if (Number.isFinite(mins) && mins > 0) prox.withinMinutes = mins;
+        if (p.mode === 'driving' || p.mode === 'transit' || p.mode === 'walking') prox.mode = p.mode;
+        out.proximity = prox;
+      }
+    }
     else if (['beds', 'baths', 'maxPrice', 'minPrice', 'minSqft'].includes(k)) {
       const n = typeof v === 'number' ? v : Number(v);
       if (Number.isFinite(n) && n >= 0) (out as Record<string, unknown>)[k] = n;

@@ -18,10 +18,18 @@ export interface SearchFilter {
   minSqft?: number;
   /** Free-text remark search via FULLTEXT (e.g. "ocean view", "remodeled kitchen"). */
   keywords?: string;
+  /** Proximity constraint (e.g. "within 30 min of downtown LA"). When present, the
+   * search skill consults the maps client to filter/rank by commute — a CODE decision
+   * driven by whether this slot exists, not by the LLM choosing to call a tool. */
+  proximity?: {
+    to: string;              // destination text (place / address)
+    withinMinutes?: number;  // max commute minutes (if a time was given)
+    mode?: 'driving' | 'transit' | 'walking';
+  };
 }
 
 export const FILTER_KEYS: ReadonlyArray<keyof SearchFilter> = [
-  'city', 'beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft', 'keywords',
+  'city', 'beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft', 'keywords', 'proximity',
 ];
 
 /**
@@ -69,6 +77,10 @@ export function summarizeFilter(f: SearchFilter): string {
   if (f.pool === true) parts.push('pool');
   else if (f.pool === false) parts.push('no pool');
   if (f.keywords) parts.push(`"${f.keywords}"`);
+  if (f.proximity) {
+    const t = f.proximity.withinMinutes ? `≤${f.proximity.withinMinutes}min ` : 'near ';
+    parts.push(`${t}${f.proximity.to}`);
+  }
   return parts.length ? parts.join(' · ') : '(no filters)';
 }
 

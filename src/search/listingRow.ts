@@ -23,6 +23,11 @@ export interface ListingRow {
   photoCount: number | null;
   yearBuilt: number | null;
   pool: boolean;
+  lat: number | null;
+  lng: number | null;
+  /** Commute minutes to a requested destination — filled by the search skill only
+   * when a proximity constraint was parsed (else undefined). */
+  commuteMinutes?: number | null;
 }
 
 /** SELECT aliases (physical column -> DTO field) come from the field dictionary,
@@ -45,6 +50,8 @@ export function mapListingRow(r: RowDataPacket): ListingRow {
     photoCount: num(r.photoCount),
     yearBuilt: num(r.yearBuilt),
     pool: String(r.pool ?? '') === '1',
+    lat: num(r.lat),
+    lng: num(r.lng),
   };
 }
 

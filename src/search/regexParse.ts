@@ -75,6 +75,32 @@ function priceWithDirection(q: string): { maxPrice?: number; minPrice?: number }
   return out;
 }
 
+/** Extract a proximity/commute constraint: a destination + optional time + mode.
+ * e.g. "within 30 min of downtown LA" / "距 XX 公司 30 分钟车程" / "walk to the beach".
+ * Best-effort; if no destination is found, returns undefined (no slot). */
+export function extractProximity(q: string): SearchFilter['proximity'] {
+  let minutes: number | undefined;
+  let mode: 'driving' | 'transit' | 'walking' | undefined;
+  let to: string | undefined;
+
+  let m: RegExpMatchArray | null;
+  // time: "30 min(utes)" | "30 分钟"
+  if ((m = q.match(/(\d{1,3})\s*(?:min(?:ute)?s?|分钟)/i))) minutes = Number(m[1]);
+  // mode
+  if (/\b(?:walk(?:ing)?|walk to|on foot)\b|走路|步行/i.test(q)) mode = 'walking';
+  else if (/\b(?:transit|by bus|by train|public transport)\b|地铁|公交|坐车/i.test(q)) mode = 'transit';
+  else if (/\b(?:driv(?:e|ing)|by car|commute)\b|车程|开车|通勤/i.test(q)) mode = 'driving';
+
+  // destination: "of/from/to/near <place>" | "距/离 <place>" | "靠近/走路到 <place>"
+  if ((m = q.match(/(?:within[^,]*?(?:of|from|to)|close to|near|next to|walk to|commute to)\s+([A-Z][\w.& ]+?)(?=\s*(?:within|,|\.|$|\d))/i))) {
+    to = m[1]!.trim();
+  } else if ((m = q.match(/(?:距|离|靠近|走路到|通勤到|到)\s*([一-鿿A-Za-z][一-鿿A-Za-z0-9.& ]*?)(?=\s*\d|\s*(?:的|车程|分钟|附近|地铁|公交)|[,，。]|$)/))) {
+    to = m[1]!.trim();
+  }
+  if (!to) return undefined;
+  return { to, ...(minutes !== undefined ? { withinMinutes: minutes } : {}), ...(mode ? { mode } : {}) };
+}
+
 /** Best-effort structured extraction. Missing fields are simply left out. */
 export function regexParse(query: string): SearchFilter {
   const q = query.trim();
@@ -82,6 +108,9 @@ export function regexParse(query: string): SearchFilter {
 
   const city = extractCity(q);
   if (city) f.city = city;
+
+  const proximity = extractProximity(q);
+  if (proximity) f.proximity = proximity;
 
   let m: RegExpMatchArray | null;
   if ((m = q.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:bed(?:room)?s?|br|bd)\b/i)) ||

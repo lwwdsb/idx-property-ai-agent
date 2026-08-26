@@ -60,13 +60,14 @@ async function runIntent() {
     // finally returned (rules may have decided first).
     let topSkill: string | null = null;
     let topScore: number | null = null;
+    let topMargin: number | null = null;
     if (classifyLive) {
       try {
         const g = await pythonBridge.classify(c.input);
-        topSkill = g.skill; topScore = g.score;
+        topSkill = g.skill; topScore = g.score; topMargin = g.margin;
       } catch { /* leave null */ }
     }
-    preds.push({ id: c.id, input: c.input, gold: c.label.intents, pred, via, topSkill, topScore });
+    preds.push({ id: c.id, input: c.input, gold: c.label.intents, pred, via, topSkill, topScore, topMargin });
   }
   writeFileSync(`${OUT}/intent.preds.jsonl`,
     preds.map((p) => JSON.stringify(p)).join('\n') + '\n');

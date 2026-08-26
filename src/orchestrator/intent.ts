@@ -28,13 +28,13 @@ export interface ClassifyOptions {
   classify?: (message: string) => Promise<IntentGuess>;
 }
 
-/** Min cosine for the embedding classifier to be trusted; below -> clarify/unknown.
- * Swept on the intent eval set (not pitched): 0.58 lifts out-of-domain rejection
- * 3%->17% while keeping in-domain wrong-reject at ~2.4% (the F1-optimal 0.74 would
- * reject ~36% of real queries — unacceptable). The real ceiling is the classifier's
- * weak in/out score separation, not the threshold — improving that (margin / better
- * model) is the follow-up. */
+/** Embedding-classifier acceptance gate (both swept on the intent eval set, not pitched):
+ * accept its guess only if top1 score >= EMBED_THRESHOLD AND the top1-top2 margin is
+ * decisive (>= EMBED_MARGIN). The margin catches out-of-domain inputs that score
+ * moderately high on some intent but are "half-like" several — a single score threshold
+ * can't separate those because in/out scores overlap. Below either -> unknown/clarify. */
 const EMBED_THRESHOLD = 0.58;
+const EMBED_MARGIN = 0.05;
 const ROUTABLE = new Set<Intent>(['search', 'market', 'recommend', 'knowledge', 'email']);
 
 export const MARKET_RE = /\b(market|median|average price|avg price|price per|per sq\.?\s?ft|per square foot|trend|appreciat|going up|going down|good time to buy|worth buying)\b|行情|均价|中位|每平尺|每平方|走势|趋势|房价|涨|跌|升值|贬值|涨幅|跌幅|成交怎么样|最近成交/i;
@@ -97,7 +97,7 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   if (opts.classify) {
     try {
       const guess = await opts.classify(message);
-      if (guess.score >= EMBED_THRESHOLD && ROUTABLE.has(guess.skill as Intent)) {
+      if (guess.score >= EMBED_THRESHOLD && guess.margin >= EMBED_MARGIN && ROUTABLE.has(guess.skill as Intent)) {
         return { intent: guess.skill as Intent, confidence: 'high', filter: parsed.filter, via: 'embedding' };
       }
     } catch { /* 乙: classifier down -> fall through to clarify */ }

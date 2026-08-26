@@ -43,39 +43,35 @@ def _sweep_threshold(preds):
     and the current pred came from embedding). At threshold t: if topScore>=t -> predict
     topSkill (if routable), else unknown. Rule-decided samples keep their prediction.
     Score by overall macro-F1 over ALL samples. Returns best t + curve."""
-    cand = [round(x / 100, 2) for x in range(35, 76)]   # 0.35 .. 0.75
-    curve = {}
-    # in-domain vs OOD samples that hinge on the embedding score
+    score_cand = [round(x / 100, 2) for x in range(35, 76)]   # 0.35 .. 0.75
+    margin_cand = [round(x / 100, 2) for x in range(0, 21, 1)]  # 0.00 .. 0.20
     ind = [p for p in preds if "unknown" not in p["gold"] and p.get("topScore") is not None]
     ood = [p for p in preds if "unknown" in p["gold"] and p.get("topScore") is not None]
 
-    best_f1, best_f1_t = -1.0, None
-    for t in cand:
-        pairs = []
-        for p in preds:
-            gold = p["gold"][0]
-            ts, tk, via = p.get("topScore"), p.get("topSkill"), p.get("via")
-            hinge = ts is not None and (via == "embedding" or p["pred"] == "unknown")
-            pred = (tk if (ts >= t and tk in ROUTABLE) else "unknown") if hinge else p["pred"]
-            pairs.append((gold, pred))
-        f1 = classification_report(pairs)["macro_f1"]
-        in_wrong = sum(1 for p in ind if p["topScore"] < t) / len(ind) if ind else 0
-        ood_rej = sum(1 for p in ood if p["topScore"] < t) / len(ood) if ood else 0
-        curve[t] = {"macro_f1": round(f1, 4), "in_domain_wrong_reject": round(in_wrong, 4),
-                    "ood_reject": round(ood_rej, 4)}
-        if f1 > best_f1:
-            best_f1, best_f1_t = f1, t
+    def accept(p, t, mg):
+        """Would the embedding guess be accepted (routed) at (score>=t AND margin>=mg)?"""
+        ts, m, tk = p.get("topScore"), p.get("topMargin"), p.get("topSkill")
+        return ts is not None and ts >= t and (m if m is not None else 1.0) >= mg and tk in ROUTABLE
 
-    # RECOMMENDED threshold: best macro-F1 SUBJECT TO in-domain wrong-reject <= 5%
-    # (raw macro-F1 optimum over-rejects real queries — unacceptable in production).
-    ok = [(t, c) for t, c in curve.items() if c["in_domain_wrong_reject"] <= 0.05]
-    rec_t = max(ok, key=lambda tc: tc[1]["macro_f1"])[0] if ok else best_f1_t
-    return {
-        "f1_optimal_threshold": best_f1_t, "f1_optimal_macro_f1": round(best_f1, 4),
-        "recommended_threshold": rec_t, "recommended": curve[rec_t],
-        "constraint": "in-domain wrong-reject <= 5%",
-        "curve": curve,
-    }
+    results = []
+    for t in score_cand:
+        for mg in margin_cand:
+            pairs = []
+            for p in preds:
+                gold = p["gold"][0]
+                hinge = p.get("topScore") is not None and (p.get("via") == "embedding" or p["pred"] == "unknown")
+                pred = (p["topSkill"] if accept(p, t, mg) else "unknown") if hinge else p["pred"]
+                pairs.append((gold, pred))
+            f1 = classification_report(pairs)["macro_f1"]
+            in_wrong = sum(1 for p in ind if not accept(p, t, mg)) / len(ind) if ind else 0
+            ood_rej = sum(1 for p in ood if not accept(p, t, mg)) / len(ood) if ood else 0
+            results.append({"t": t, "margin": mg, "macro_f1": round(f1, 4),
+                            "in_domain_wrong_reject": round(in_wrong, 4), "ood_reject": round(ood_rej, 4)})
+
+    f1_opt = max(results, key=lambda r: r["macro_f1"])
+    ok = [r for r in results if r["in_domain_wrong_reject"] <= 0.05]
+    rec = max(ok, key=lambda r: r["ood_reject"]) if ok else f1_opt   # maximize OOD reject under safety
+    return {"f1_optimal": f1_opt, "recommended": rec, "constraint": "in-domain wrong-reject <= 5%"}
 
 
 def intent_metrics():
@@ -131,13 +127,12 @@ def main():
     print(f"  accuracy (primary label):    {intent['accuracy']}   macro-F1: {intent['macro_f1']}   n={intent['n']}")
     print(f"  out-of-domain reject rate:   {intent['ood_reject_rate']}  (n_ood={intent['n_out_of_domain']})")
     sw = intent["threshold_sweep"]
-    cur = sw["curve"].get(0.55, {})
-    print(f"  threshold sweep:")
-    print(f"    f1-optimal t={sw['f1_optimal_threshold']} (macro-F1 {sw['f1_optimal_macro_f1']}) — but over-rejects in-domain")
-    print(f"    RECOMMENDED t={sw['recommended_threshold']} ({sw['constraint']}): "
-          f"macro-F1 {sw['recommended']['macro_f1']}, OOD-reject {sw['recommended']['ood_reject']}, "
-          f"in-domain-wrong-reject {sw['recommended']['in_domain_wrong_reject']}")
-    print(f"    current 0.55: macro-F1 {cur.get('macro_f1')}, OOD-reject {cur.get('ood_reject')}")
+    f1o, rec = sw["f1_optimal"], sw["recommended"]
+    print(f"  threshold+margin sweep:")
+    print(f"    f1-optimal: t={f1o['t']} margin={f1o['margin']} -> macro-F1 {f1o['macro_f1']}, "
+          f"OOD-reject {f1o['ood_reject']}, in-domain-wrong-reject {f1o['in_domain_wrong_reject']}")
+    print(f"    RECOMMENDED ({sw['constraint']}): t={rec['t']} margin={rec['margin']} -> "
+          f"macro-F1 {rec['macro_f1']}, OOD-reject {rec['ood_reject']}, in-domain-wrong-reject {rec['in_domain_wrong_reject']}")
     if intent["misses"]:
         print(f"  misses ({len(intent['misses'])}):")
         for m in intent["misses"][:12]:

@@ -22,14 +22,32 @@ from search import hybrid_search, build_filter
 # Example utterances per skill — the embedding intent classifier matches a message
 # against these (generalizes past regex). Kept small; embedded once at startup.
 SKILL_EXAMPLES = {
-    "search": ["find 3 bedroom homes in Irvine", "houses under 1 million with a pool",
-               "condos in San Diego", "在 Irvine 找带泳池的房子", "show me listings in Tustin"],
-    "market": ["what is the market like in Irvine", "median sold price in San Diego",
-               "price per square foot in Irvine", "Irvine 行情怎么样", "are prices going up"],
-    "recommend": ["show me similar homes", "recommend listings like this one",
-                  "comparable properties to this", "跟这套类似的房子", "more homes like that"],
-    "knowledge": ["what does DOM mean", "how is the sold to list ratio calculated",
-                  "what is price per square foot", "什么是 comp", "explain days on market"],
+    "search": [
+        "find 3 bedroom homes in Irvine", "houses under 1 million with a pool",
+        "condos in San Diego", "在 Irvine 找带泳池的房子", "show me listings in Tustin",
+        "looking for a single family home with a big yard", "4 bed 3 bath near the beach",
+        "any townhouses for sale in Pasadena", "帮我找一套学区好的房子", "洛杉矶两百万以下的公寓",
+        "properties with an ocean view under 3 million", "有没有带车库的独栋"],
+    "market": [
+        "what is the market like in Irvine", "median sold price in San Diego",
+        "price per square foot in Irvine", "Irvine 行情怎么样", "are prices going up",
+        "how fast are homes selling here", "is it a buyer's or seller's market",
+        "how much have prices appreciated this year", "这个城市房价走势如何", "最近成交价怎么样",
+        "average days on market in Tustin"],
+    "recommend": [
+        "show me similar homes", "recommend listings like this one",
+        "comparable properties to this", "跟这套类似的房子", "more homes like that",
+        "anything else like the first one", "跟第二个差不多的还有吗", "find me options like this property",
+        "what else matches this style"],
+    "knowledge": [
+        "what does DOM mean", "how is the sold to list ratio calculated",
+        "what is price per square foot", "什么是 comp", "explain days on market",
+        "what does contingent mean", "define escrow", "how do you compute a price estimate",
+        "什么是成交挂牌比", "how many comparables do you need", "which field stores the price"],
+    "email": [
+        "email the market report to my client", "send this to buyer@example.com",
+        "把行情发邮件给经纪人", "can you email the Irvine summary to lisa@x.com",
+        "发送这份报告到邮箱", "email these listings to me"],
 }
 
 STATE = {}

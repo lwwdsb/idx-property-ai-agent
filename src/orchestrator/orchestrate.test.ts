@@ -23,7 +23,7 @@ const planLLM: LLMClient = {
 };
 
 const calls: string[] = [];
-let classifyReturn = { skill: 'unknown', score: 0.2 };
+let classifyReturn = { skill: 'unknown', score: 0.2, margin: 0.1 };
 let searchReturn: Array<Record<string, unknown>> = [];
 const fakeBridge: PythonBridge = {
   async classify(m) { calls.push(`classify:${m}`); return classifyReturn; },
@@ -164,17 +164,23 @@ t('compound: search + price validate chained', async () => {
 
 // ---- embedding fallback when regex is unsure ----
 t('regex-miss phrasing -> routed via embedding classifier', async () => {
-  classifyReturn = { skill: 'market', score: 0.9 };   // service would say "market"
+  classifyReturn = { skill: 'market', score: 0.9, margin: 0.2 };   // service would say "market"
   const r = await orchestrate('u', 'give me the lay of the land please', opts); // no regex keyword
   assert.equal(r.intent, 'market');
   assert.ok(calls.some((c) => c.startsWith('classify:')), 'embedding classifier consulted');
-  classifyReturn = { skill: 'unknown', score: 0.2 };  // reset
+  classifyReturn = { skill: 'unknown', score: 0.2, margin: 0.1 };  // reset
 });
 t('low embedding score -> still clarify (floor)', async () => {
-  classifyReturn = { skill: 'market', score: 0.3 };   // below threshold
+  classifyReturn = { skill: 'market', score: 0.3, margin: 0.2 };   // below threshold
   const r = await orchestrate('u', 'zzz qqq', opts);
   assert.equal(r.intent, 'unknown');
-  classifyReturn = { skill: 'unknown', score: 0.2 };
+  classifyReturn = { skill: 'unknown', score: 0.2, margin: 0.1 };
+});
+t('high score but LOW margin -> unknown (ambiguous/OOD, margin gate)', async () => {
+  classifyReturn = { skill: 'market', score: 0.9, margin: 0.01 };  // "half-like" several intents
+  const r = await orchestrate('u', 'qqq zzz vvv', opts);
+  assert.equal(r.intent, 'unknown');
+  classifyReturn = { skill: 'unknown', score: 0.2, margin: 0.1 };
 });
 
 // ---- clarify / fallback ----

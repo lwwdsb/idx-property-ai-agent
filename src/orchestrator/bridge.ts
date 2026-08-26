@@ -9,6 +9,9 @@ import { config } from '../config.js';
 export interface IntentGuess {
   skill: string;
   score: number;
+  /** top1 - top2 score gap. Low margin = the query is "half-like" several intents,
+   * a signal of an out-of-domain / ambiguous input even when top1 isn't that low. */
+  margin: number;
 }
 
 export interface SemanticSearchParams {
@@ -57,7 +60,11 @@ async function post<T>(path: string, body: unknown): Promise<T> {
 
 /** Real bridge: HTTP to the warm retrieval service. */
 export const pythonBridge: PythonBridge = {
-  classify: (message) => post<IntentGuess>('/classify', { message }),
+  classify: async (message) => {
+    const r = await post<{ skill: string; score: number; ranked: Array<[string, number]> }>('/classify', { message });
+    const margin = r.ranked.length >= 2 ? r.ranked[0]![1] - r.ranked[1]![1] : r.score;
+    return { skill: r.skill, score: r.score, margin };
+  },
   rag: async (question) => {
     const r = await post<{ answer: string; sources: string[] }>('/rag', { question });
     return `${r.answer}\n\nSources: ${r.sources.join('; ')}`;

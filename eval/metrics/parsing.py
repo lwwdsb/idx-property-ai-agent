@@ -10,8 +10,15 @@ Compares a predicted structured filter against the gold filter, at the field lev
 
 
 def _pairs(f):
-    """Filter dict -> set of (field, value) pairs, ignoring None/unset."""
-    return {(k, v) for k, v in (f or {}).items() if v is not None}
+    """Filter dict -> set of (field, value) pairs, ignoring None/unset.
+    Nested values (e.g. proximity object) are JSON-serialized so they stay hashable."""
+    import json as _json
+    out = set()
+    for k, v in (f or {}).items():
+        if v is None:
+            continue
+        out.add((k, _json.dumps(v, sort_keys=True) if isinstance(v, (dict, list)) else v))
+    return out
 
 
 def slot_scores(records):

@@ -49,11 +49,24 @@ async function runIntent() {
   const preds = [];
   for (const c of cases) {
     let pred = 'error';
+    let via: string | undefined;
     try {
       const r = await classifyIntent(c.input, { llm, classify });
       pred = r.intent;
+      via = r.via;
     } catch { /* keep 'error' */ }
-    preds.push({ id: c.id, input: c.input, gold: c.label.intents, pred });
+    // ALSO record the raw embedding-classifier top skill+score (for threshold sweeping).
+    // This is what the fallback layer thresholds on; independent of what classifyIntent
+    // finally returned (rules may have decided first).
+    let topSkill: string | null = null;
+    let topScore: number | null = null;
+    if (classifyLive) {
+      try {
+        const g = await pythonBridge.classify(c.input);
+        topSkill = g.skill; topScore = g.score;
+      } catch { /* leave null */ }
+    }
+    preds.push({ id: c.id, input: c.input, gold: c.label.intents, pred, via, topSkill, topScore });
   }
   writeFileSync(`${OUT}/intent.preds.jsonl`,
     preds.map((p) => JSON.stringify(p)).join('\n') + '\n');

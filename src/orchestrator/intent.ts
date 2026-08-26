@@ -28,8 +28,13 @@ export interface ClassifyOptions {
   classify?: (message: string) => Promise<IntentGuess>;
 }
 
-/** Min cosine for the embedding classifier to be trusted; below -> clarify. */
-const EMBED_THRESHOLD = 0.55;
+/** Min cosine for the embedding classifier to be trusted; below -> clarify/unknown.
+ * Swept on the intent eval set (not pitched): 0.58 lifts out-of-domain rejection
+ * 3%->17% while keeping in-domain wrong-reject at ~2.4% (the F1-optimal 0.74 would
+ * reject ~36% of real queries — unacceptable). The real ceiling is the classifier's
+ * weak in/out score separation, not the threshold — improving that (margin / better
+ * model) is the follow-up. */
+const EMBED_THRESHOLD = 0.58;
 const ROUTABLE = new Set<Intent>(['search', 'market', 'recommend', 'knowledge', 'email']);
 
 export const MARKET_RE = /\b(market|median|average price|avg price|price per|per sq\.?\s?ft|per square foot|trend|appreciat|going up|going down|good time to buy|worth buying)\b|行情|均价|中位|每平尺|每平方|走势|趋势|房价|涨|跌|升值|贬值|涨幅|跌幅|成交怎么样|最近成交/i;

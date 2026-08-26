@@ -88,3 +88,31 @@
 {"id":"int-088","input":"how's appreciation been in Arcadia","label":{"intents":["market"]},"meta":{"source":"human","verified":true}}
 {"id":"int-089","input":"什么是 escrow","label":{"intents":["knowledge"]},"meta":{"source":"human","verified":true}}
 {"id":"int-090","input":"email the report","label":{"intents":["email"]},"meta":{"source":"human","verified":true}}
+{"id":"int-091","input":"在吗","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-092","input":"哈哈哈笑死我了","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-093","input":"how are you doing today","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-094","input":"帮我算一下房贷月供是多少","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-095","input":"what are today's mortgage interest rates","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-096","input":"帮我写一段 python 代码","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-097","input":"translate this sentence to French","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-098","input":"今天股票怎么样","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-099","input":"tell me a joke","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-100","input":"我昨天买了套房好开心","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-101","input":"what's the capital of France","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-102","input":"你叫什么名字","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-103","input":"recommend a good restaurant near me","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-104","input":"帮我订一张明天的机票","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-105","input":"asdfgh 12345 !!!","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-106","input":"好的谢谢你","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-107","input":"weather forecast for this weekend","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-108","input":"我想学做饭","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-109","input":"what time is it","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-110","input":"这个房子风水好不好","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-111","input":"can you help me write my resume","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-112","input":"讲讲今天的新闻","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-113","input":"how do property taxes work in general","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-114","input":"嗯嗯知道了","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-115","input":"play some music","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-116","input":"你觉得现在适合结婚吗","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-117","input":"what is the meaning of life","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}
+{"id":"int-118","input":"给我推荐一部电影","label":{"intents":["unknown"]},"meta":{"source":"human","verified":true}}

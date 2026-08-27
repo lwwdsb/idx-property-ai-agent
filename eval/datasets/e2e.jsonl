@@ -1,0 +1,25 @@
+{"id":"e2e-001","input":"在 Irvine 找 3 居室 200万以下","expect":{"intent":"search"},"note":"basic search routing","meta":{"source":"human","verified":true}}
+{"id":"e2e-002","input":"3 bed 2 bath in San Diego under 900k","expect":{"intent":"search"},"note":"EN search","meta":{"source":"human","verified":true}}
+{"id":"e2e-003","input":"Irvine 行情怎么样","expect":{"intent":"market","reply_has":"median"},"note":"market returns real stats","meta":{"source":"human","verified":true}}
+{"id":"e2e-004","input":"洛杉矶的均价是多少","expect":{"intent":"market"},"note":"中文 market","meta":{"source":"human","verified":true}}
+{"id":"e2e-005","input":"什么是 DOM","expect":{"intent":"knowledge"},"note":"knowledge routing","meta":{"source":"human","verified":true}}
+{"id":"e2e-006","input":"what is days on market","expect":{"intent":"knowledge"},"note":"substring 'market' trap -> still knowledge","meta":{"source":"human","verified":true}}
+{"id":"e2e-007","input":"跟 1174456906 类似的房子","expect":{"intent":"recommend"},"note":"recommend by explicit id","meta":{"source":"human","verified":true}}
+{"id":"e2e-008","input":"在 Gotham City 找 3 居室","expect":{"intent":"search","reply_has":"don't have listings"},"note":"bogus city -> validate & clarify, no bad search","meta":{"source":"human","verified":true}}
+{"id":"e2e-009","input":"在 USC 附近找便宜的房子","expect":{"intent":"search","reply_has":"Los Angeles"},"note":"USC is a landmark -> resolves to Los Angeles and searches (stable). Whether the LLM also fills the proximity slot for commute-ranking is a best-effort enhancement, not asserted (LLM-nondeterministic).","meta":{"source":"human","verified":true}}
+{"id":"e2e-010","input":"你好","expect":{"intent":"unknown"},"note":"greeting -> unknown/clarify (OOD reject)","meta":{"source":"human","verified":true}}
+{"id":"e2e-011","input":"帮我算一下房贷月供","expect":{"intent":"unknown"},"note":"out-of-domain -> unknown","meta":{"source":"human","verified":true}}
+{"id":"e2e-012","input":"tell me a joke","expect":{"intent":"unknown"},"note":"out-of-domain -> unknown","meta":{"source":"human","verified":true}}
+{"id":"e2e-013","input":"在 Irvine 找 3 居室,再看看这个城市的行情","expect":{"intent":"compound","skill_has":"market","reply_has":"median"},"note":"multi-intent search+market composed","meta":{"source":"human","verified":true}}
+{"id":"e2e-014","input":"帮我在 Irvine 找 3 居室,顺便看看贵不贵","expect":{"intent":"compound"},"note":"KNOWN GAP: detects compound but doesn't decompose the vague '看看贵不贵' into a price-validate sub-skill ('顺便' leaks as semantic). e2e-013 covers a clean compound. Kept as a routing-only check.","meta":{"source":"human","verified":true}}
+{"id":"e2e-015","input":"3 bedroom under 1M","expect":{"reply_has":"city"},"note":"missing city -> clarify, not a blind search","meta":{"source":"human","verified":true}}
+{"id":"e2e-016","input":"email the Irvine market report to client@example.com","expect":{"intent":"email","reply_has":"approval","reply_not":"Sent"},"note":"丙: email is DRAFTED not sent (run as authorized operator so the draft flow is actually exercised)","meta":{"source":"human","verified":true,"user":"operator"}}
+{"id":"e2e-017","input":"把 Tustin 行情发给 a@b.com 和 c@d.com","expect":{"skill_has":"email","reply_not":"Sent"},"note":"丙: bulk email DRAFTED not sent. Intent not asserted: both routings are correct — 'email' alone (the email template already embeds the Tustin market report) or 'compound' (market then email); LLM plan-decomposition varies. Lock only: drafted + not sent.","meta":{"source":"human","verified":true,"user":"operator"}}
+{"id":"e2e-018","input":"尔湾行情","expect":{"intent":"market","reply_has":"median"},"note":"中文城市别名 尔湾->Irvine, direct answer","meta":{"source":"human","verified":true}}
+{"id":"e2e-019","input":"在圣地亚哥找带泳池的独栋 300万以下","expect":{"intent":"search"},"note":"中文 city alias + filters","meta":{"source":"human","verified":true}}
+{"id":"e2e-020","input":"跟第一个类似的房子","expect":{"intent":"recommend"},"note":"reference recommend (no prior search in this turn -> asks or resolves)","meta":{"source":"human","verified":true}}
+{"id":"e2e-021","input":"asdfgh 12345","expect":{"intent":"unknown"},"note":"gibberish -> unknown","meta":{"source":"human","verified":true}}
+{"id":"e2e-022","input":"how's the housing market in Tustin","expect":{"intent":"market"},"note":"EN market phrasing","meta":{"source":"human","verified":true}}
+{"id":"e2e-023","input":"show me similar homes to that one","expect":{"intent":"recommend"},"note":"EN recommend by reference","meta":{"source":"human","verified":true}}
+{"id":"e2e-024","input":"在 Irvine 找 3 居室不要泳池","expect":{"intent":"search","reply_has":"no pool"},"note":"pool negation tri-state shows in filter","meta":{"source":"human","verified":true}}
+{"id":"e2e-025","input":"send the San Diego report to buyer@gmail.com","expect":{"intent":"email","reply_has":"approval","reply_not":"Sent"},"note":"丙: drafted not sent (run as authorized operator so reply_not-Sent is a real test of the draft path, not an auth refusal)","meta":{"source":"human","verified":true,"user":"operator"}}

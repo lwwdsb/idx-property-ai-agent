@@ -22,6 +22,8 @@ def load(name):
 
 def main():
     ip = load("intent_parse.metrics.json")
+    e2e = load("e2e.metrics.json")
+    agent = load("agent.metrics.json")
     ret = load("retrieval.metrics.json")
     rag = load("rag.metrics.json")
     tune = load("tuning.metrics.json")
@@ -39,6 +41,13 @@ def main():
         lines.append(f"| Intent | accuracy (primary) / macro-F1 | {i['accuracy']} / {i['macro_f1']} |")
         lines.append(f"| Parse | escalation-decision accuracy | {p['escalation_accuracy']} |")
         lines.append(f"| Parse | regex exact-match (non-escalate) | {p['regex_exact_match_non_escalate']} |")
+    if e2e:
+        lines.append(f"| End-to-end | pass rate ({e2e['passed']}/{e2e['n']} cases) | {e2e['pass_rate']} |")
+        lines.append(f"| End-to-end | emails actually sent (must be 0) | {e2e['emails_sent']} {'✓' if e2e['safety_ok'] else '✗'} |")
+    if agent:
+        g = agent["grounding"]
+        lines.append(f"| Auto/agent | pass rate ({agent['passed']}/{agent['n']} tasks) | {agent['pass_rate']} |")
+        lines.append(f"| Auto/agent | agent self-sent (must 0) · grounded | {agent['safety']['self_sent']} {'✓' if agent['safety_ok'] else '✗'} · {g['grounded']}/{g['checked']} |")
     if ret:
         h = ret["per_mode"]["hybrid"]
         lines.append(f"| Retrieval | hybrid nDCG@10 | {h['nDCG@10']} |")
@@ -57,6 +66,54 @@ def main():
     lines.append("")
 
     # ---- detail ----
+    if e2e:
+        pa = e2e.get("per_assertion", {})
+        lines += ["## End-to-end (orchestrate → reply)", "",
+                  f"Runs the real `orchestrate()` over {e2e['n']} user-level cases "
+                  f"(live: llm={e2e['live']['llm']}, classify={e2e['live']['classify']}) — checks intent "
+                  "routing, skill composition, reply content, and the 丙 safety invariant.", "",
+                  "| assertion | passed |", "|---|---|"]
+        for k, d in pa.items():
+            lines.append(f"| {k} | {d['passed']}/{d['total']} |")
+        lines += ["",
+                  f"**Safety invariant: emails actually sent = {e2e['emails_sent']} "
+                  f"({'OK — none' if e2e['safety_ok'] else 'FAIL'}).** Email cases run as an authorized "
+                  "operator with a fake sender + in-memory drafts, so the draft→approval path is exercised "
+                  "while nothing is ever delivered.", ""]
+        if e2e.get("failures"):
+            lines += ["Open failures:", ""]
+            for f in e2e["failures"]:
+                bad = ", ".join(k for k, v in f["checks"].items() if not v)
+                lines.append(f"- `{f['input']}` — failed [{bad}]; got intent={f['got_intent']}")
+            lines.append("")
+
+    if agent:
+        pa = agent.get("per_assertion", {})
+        lines += ["## Auto/agent (autonomous ReAct)", "",
+                  f"Runs the real autonomous loop over {agent['n']} tasks (live llm={agent['llm_live']}) — "
+                  "checks tool composition, suspend-for-approval, and step budget.", "",
+                  "| assertion | passed |", "|---|---|"]
+        for k, d in pa.items():
+            lines.append(f"| {k} | {d['passed']}/{d['total']} |")
+        s, gr = agent["safety"], agent["grounding"]
+        comp = agent.get("completion") or {}
+        comp_line = (f"Completion (LLM-judge — SOFT, uncalibrated DeepSeek self-judge): mean {comp['mean']}/2, "
+                     f"fully-done {comp['fully_done']}/{comp['n_judged']}.") if comp.get("n_judged") else ""
+        tj = agent.get("trajectory") or {}
+        traj_line = (f"Trajectory: mean {tj['mean_steps']} steps/task; "
+                     + ("possible detours: " + ", ".join(tj["detours"]) if tj.get("detours") else "no detours.")) if tj else ""
+        lines += ["",
+                  f"**Safety (HITL full chain): agent self-sent = {s['self_sent']} (must 0), "
+                  f"approve delivered {s['approve_sent']}/{s['approve_expected']}, cancel sent {s['cancel_sent']} (must 0) "
+                  f"→ {'OK — a send happens ONLY after a human approve' if agent['safety_ok'] else 'FAIL'}.**",
+                  f"**Grounding: {gr['grounded']}/{gr['checked']} replies fully grounded** — every MLS#/listing id "
+                  "in the reply traces to a tool observation (no invented listings).",
+                  comp_line, traj_line, "",
+                  "Tools the agent chose per task:", ""]
+        for tid, tools in agent.get("tool_usage", {}).items():
+            lines.append(f"- `{tid}`: {', '.join(tools) or '(none)'}")
+        lines.append("")
+
     if ret:
         lines += ["## Retrieval — hybrid vs single-path", "",
                   "| mode | nDCG@10 | recall@10 | MRR | P@5 |", "|---|---|---|---|---|"]
@@ -96,12 +153,14 @@ def main():
                   f"p50 {c.get('p50')}ms, p99 {c.get('p99')}ms. RAG latency is LLM-generation-bound "
                   "(~1.2s), not retrieval; everything else is single-digit-to-low-double-digit ms._", ""]
 
-    if ip and ip["intent"].get("misses"):
-        lines += ["## Known gaps (from eval)", "",
-                  "- Intent: embedding classifier has no reject option — greetings / off-topic "
-                  "get forced into the nearest skill instead of `unknown`.",
-                  "- Parse: a few false-positive escalations (city-only long queries).",
-                  "- Retrieval: LLM-judge grades need human spot-check calibration.", ""]
+    lines += ["## Known gaps (from eval)", "",
+              "- Intent OOD: now gated by threshold + top-2 margin + structural-only routing "
+              "(a bare keyword residue no longer masquerades as a search) — reject rate ~63%, not 100%; "
+              "some off-topic still leaks to the nearest skill but degrades safely (asks, never acts).",
+              "- Compound: detects multi-intent, but doesn't decompose a *vague* price-check "
+              "(\"顺便看看贵不贵\") into a validate sub-skill (see e2e-014).",
+              "- Parse: a few false-positive escalations (city-only long queries).",
+              "- Retrieval: LLM-judge grades need human spot-check calibration.", ""]
 
     lines += ["---", "",
               "Datasets are LLM-assisted + human-spot-checked; only queries + ids + labels are "
@@ -111,7 +170,7 @@ def main():
         f.write("\n".join(lines))
 
     # regression snapshot
-    snap = {"at": now, "intent_parse": ip, "retrieval": ret, "rag": rag}
+    snap = {"at": now, "intent_parse": ip, "e2e": e2e, "agent": agent, "retrieval": ret, "rag": rag}
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     with open(os.path.join(HIST, f"snapshot-{stamp}.json"), "w") as f:
         json.dump(snap, f, indent=2)

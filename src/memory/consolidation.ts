@@ -63,8 +63,13 @@ const SYSTEM = [
   'Process: read_recent_sessions -> list_memories (avoid duplicates) -> add_memory for each new,',
   'durable memory (skip one-off/transient details; keep it concise).',
   'CONSOLIDATE when useful: if several episodics point to one durable preference, add_memory a',
-  'semantic (list them in mergedFrom) and forget_memory the redundant episodics; forget_memory',
-  'anything outdated or contradicted. Reply with a short summary when done.',
+  'semantic (list them in mergedFrom) and forget_memory the redundant episodics.',
+  'RESOLVE CONFLICTS explicitly: after list_memories, compare EACH stored memory against the',
+  'recent sessions. If a stored memory is CONTRADICTED by newer behavior (e.g. stored "cares',
+  'about schools" but recent sessions ignore schools), the NEWER signal wins (recency): either',
+  'update it via add_memory with the SAME name (new content replaces the old), or forget_memory',
+  'the stale one. Prefer the most recent + most-evidenced view; do not keep two contradictory',
+  'memories. Reply with a short summary when done.',
 ].join('\n');
 
 /**

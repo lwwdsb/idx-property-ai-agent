@@ -54,6 +54,7 @@ export interface AgentMetrics {
   groundingStripped: number;   // grounding gate deterministic strips (rewrite couldn't fix)
   budgetExhausted: boolean;
   suspended: boolean;          // HITL suspend
+  elapsedMs: number;           // wall-clock latency of this drive (for p50/p99)
 }
 
 export interface AgentResult {
@@ -109,11 +110,13 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
   const seen = new Set<string>();               // reset per drive (resume acceptable)
   const perTool = new Map<string, number>();
   let toolCalls = 0, toolErrors = 0, loopGuards = 0, llmCalls = 0;
+  const t0 = Date.now();
   const withMemory = (): ChatMessage[] =>
     isEmpty(mem) ? messages : [...messages, { role: 'system', content: renderMemory(mem) }];
   const M = (extra: Partial<AgentMetrics> = {}): AgentMetrics => ({
     steps: state.step, toolCalls, toolErrors, loopGuards, llmCalls,
-    groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, ...extra,
+    groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false,
+    elapsedMs: Date.now() - t0, ...extra,
   });
 
   while (state.step < budget) {
@@ -243,7 +246,7 @@ export async function resumeAgentRun(runId: number, opts: ResumeAgentOptions): P
     return { reply: `Run #${runId} is not awaiting approval (status: ${run.status}).`,
       trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId,
       metrics: { steps: run.state.step, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
-        groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false } };
+        groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, elapsedMs: 0 } };
   }
   const state = run.state;
   const draftId = run.pendingDraftId;

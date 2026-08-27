@@ -56,6 +56,8 @@ def main():
     if mets:
         tc = sum(m["toolCalls"] for m in mets)
         te = sum(m["toolErrors"] for m in mets)
+        lat = sorted(m.get("elapsedMs", 0) for m in mets)
+        pct = lambda q: lat[min(len(lat) - 1, round(q / 100 * (len(lat) - 1)))] if lat else 0
         runtime = {
             "n": len(mets),
             "tool_success_rate": round((tc - te) / tc, 3) if tc else 1.0,
@@ -65,6 +67,7 @@ def main():
             "budget_exhaust_rate": round(sum(1 for m in mets if m["budgetExhausted"]) / len(mets), 3),
             "grounding_rewrites": sum(m["groundingRewrites"] for m in mets),
             "grounding_stripped": sum(m["groundingStripped"] for m in mets),
+            "latency_p50_ms": pct(50), "latency_p99_ms": pct(99), "latency_max_ms": lat[-1] if lat else 0,
         }
 
     self_sent = meta.get("selfSentTotal")
@@ -108,6 +111,7 @@ def main():
               f"· avg-llm-calls {runtime['avg_llm_calls']} · loop-guard-rate {runtime['loop_guard_rate']} "
               f"· budget-exhaust-rate {runtime['budget_exhaust_rate']} · grounding rewrites/stripped "
               f"{runtime['grounding_rewrites']}/{runtime['grounding_stripped']}")
+        print(f"  LATENCY (per run): p50 {runtime['latency_p50_ms']}ms · p99 {runtime['latency_p99_ms']}ms · max {runtime['latency_max_ms']}ms")
     print("  per-assertion: " + ", ".join(f"{k} {d['passed']}/{d['total']}" for k, d in result["per_assertion"].items()))
     print("  tools per task: " + "; ".join(f"{i}:[{','.join(t)}]" for i, t in result["tool_usage"].items()))
     if result["failures"]:

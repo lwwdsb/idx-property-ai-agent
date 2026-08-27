@@ -107,10 +107,15 @@ export function addMemory(profile: UserProfile, m: NewMemory): UserProfile {
   const day = today();
   const e = profile.memories.find((x) => x.name === m.name);
   if (e) {
+    // same name = UPDATE of the same memory. If the content changed (e.g. an opposite
+    // preference), the new value REPLACES the old (recency wins) — salience/confidence
+    // follow the new content, NOT max (max would leave a stale high score on new content).
+    // Reinforcement of "same content over time" comes from useCount/recency in compScore.
+    const contentChanged = !!m.content && m.content !== e.content;
     e.description = m.description || e.description;
     e.content = m.content || e.content;
-    e.salience = Math.max(e.salience, m.salience ?? e.salience);
-    e.confidence = Math.max(e.confidence, m.confidence ?? e.confidence);
+    if (m.salience !== undefined) e.salience = contentChanged ? m.salience : Math.max(e.salience, m.salience);
+    if (m.confidence !== undefined) e.confidence = contentChanged ? m.confidence : Math.max(e.confidence, m.confidence);
     e.sourceRuns = [...new Set([...e.sourceRuns, ...(m.sourceRuns ?? [])])];
     e.mergedFrom = [...new Set([...e.mergedFrom, ...(m.mergedFrom ?? [])])];
     e.lastUsed = day;

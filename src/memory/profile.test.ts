@@ -44,6 +44,14 @@ await check('memory: addMemory creates then merges (salience max, sourceRuns uni
   assert.equal(p.memories[0]!.salience, 0.8);
   assert.deepEqual(p.memories[0]!.sourceRuns, [1, 2]);
 });
+await check('memory: same name + OPPOSITE content = replace (salience follows new, not max)', () => {
+  const p = freshProfile('u');
+  addMemory(p, { name: 'schools', description: 'd', type: 'semantic', content: 'cares about schools', salience: 0.9 });
+  addMemory(p, { name: 'schools', description: 'd', type: 'semantic', content: 'does NOT care about schools', salience: 0.4 });
+  assert.equal(p.memories.length, 1);
+  assert.ok(p.memories[0]!.content.includes('does NOT'));   // new content wins (recency)
+  assert.equal(p.memories[0]!.salience, 0.4);               // replaced, NOT max(0.9, 0.4)
+});
 await check('memory: touchMemory bumps useCount', () => {
   const p = freshProfile('u');
   addMemory(p, { name: 'ev1', description: 'drafted Irvine report', type: 'episodic', content: 'x' });

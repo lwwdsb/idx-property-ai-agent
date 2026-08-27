@@ -209,12 +209,34 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
     })
     .register({
       name: 'email', parallelSafe: true,
-      description: 'Draft an outbound email (e.g. a market report) to a recipient — always pending human approval, never auto-sent.',
+      description: 'Draft an outbound email to a recipient — always pending human approval, never auto-sent. '
+        + 'Provide a custom subject+body to author any email, or omit them + give a city to use the market-report template.',
+      // Bespoke params: an agent can author subject/body directly (router mode leaves ctx.args undefined -> template).
+      paramSchema: {
+        type: 'object',
+        properties: {
+          recipients: { type: 'array', items: { type: 'string' }, description: 'Recipient email addresses.' },
+          subject: { type: 'string', description: 'Email subject. Provide (with body) to author a custom email.' },
+          body: { type: 'string', description: 'Full email body text. Provide (with subject) to author a custom email; omit to use the city market-report template.' },
+          city: { type: 'string', description: 'City for the market-report template (used only when body is omitted).' },
+          query: { type: 'string', description: 'What the email is about (fallback only; prefer subject/body or city).' },
+        },
+      },
       async run(ctx) {
-        const recipients = extractEmails(ctx.message);
+        const a = ctx.args ?? {};
+        const argRecipients = Array.isArray(a.recipients)
+          ? a.recipients.filter((x): x is string => typeof x === 'string') : [];
+        const recipients = argRecipients.length ? argRecipients : extractEmails(ctx.message);
         if (!recipients.length) return { skill: 'email', reply: 'Who should I email? Include a recipient address.' };
-        if (!ctx.filter.city) return { skill: 'email', reply: 'Which city\'s market report? e.g. "email the Irvine report to client@x.com".' };
-        const { subject, body } = await weeklyMarketReport(ctx.filter.city);
+        const argSubject = typeof a.subject === 'string' && a.subject.trim() ? a.subject.trim() : undefined;
+        const argBody = typeof a.body === 'string' && a.body.trim() ? a.body.trim() : undefined;
+        let subject: string, body: string;
+        if (argSubject && argBody) {
+          ({ subject, body } = { subject: argSubject, body: argBody });   // agent-authored email
+        } else {
+          if (!ctx.filter.city) return { skill: 'email', reply: 'Which city\'s market report? e.g. "email the Irvine report to client@x.com" (or give me a subject + body).' };
+          ({ subject, body } = await weeklyMarketReport(ctx.filter.city));  // template fallback
+        }
         const r = await draftEmail({ createdBy: ctx.userId, recipients, subject, body }, draftStore);
         if (!r.ok) return { skill: 'email', reply: `Couldn't draft the email: ${r.error}` };
         return {

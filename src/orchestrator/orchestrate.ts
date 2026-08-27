@@ -12,6 +12,7 @@ import { pythonBridge, type PythonBridge } from './bridge.js';
 import type { SkillRegistry } from './skill.js';
 import { getLLMClient, type LLMClient } from '../llm/client.js';
 import type { ListingRow } from '../search/listingRow.js';
+import type { SearchFilter } from '../search/filters.js';
 import { MySqlDraftStore, type DraftStore } from '../email/drafts.js';
 import type { SendFn } from '../email/email.js';
 import { logger } from '../logger.js';
@@ -23,6 +24,10 @@ export interface OrchestrateOptions {
   draftStore?: DraftStore;
   /** Injectable email sender (tests only; default = real SMTP). */
   send?: SendFn;
+  /** Long-term memory (wrapper-injected): soft defaults to fill fields the user didn't give. */
+  filterDefaults?: Partial<SearchFilter>;
+  /** Called with the user's OWN extracted filter (pre-defaults), for preference learning. */
+  onFilter?: (userFilter: SearchFilter) => void;
 }
 
 export interface OrchestrateResult {
@@ -55,6 +60,15 @@ export async function orchestrate(
     classify: (m) => bridge.classify(m),
   });
   logger.info('orchestrate route', { userId, intent: cls.intent, confidence: cls.confidence, via: cls.via });
+
+  // Long-term memory: learn from what the USER actually gave, then fill the fields they
+  // DIDN'T give with their high-confidence preferences (SOFT defaults — the current
+  // message already took priority since these only touch still-empty fields).
+  opts.onFilter?.({ ...cls.filter });
+  if (opts.filterDefaults) {
+    const f = cls.filter as Record<string, unknown>;
+    for (const [k, v] of Object.entries(opts.filterDefaults)) if (f[k] == null) f[k] = v;
+  }
 
   // low-confidence / unknown -> clarify instead of guessing (Q6)
   if (cls.confidence === 'low' && cls.clarification) {

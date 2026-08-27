@@ -137,7 +137,7 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
     preds.push({ id: c.id, task: c.task, note: c.note, hitl: c.hitl ?? null, expect: c.expect,
       got: { toolsUsed: res.toolsUsed, stopReason: res.stopReason, steps: res.steps,
         reply: res.reply.slice(0, 200), idCount: g.idCount, ungrounded: g.ungrounded },
-      checks, pass, judge });
+      checks, pass, judge, metrics: r1?.metrics ?? null });
   }
 
   writeFileSync(`${OUT}/agent.preds.jsonl`, preds.map((p) => JSON.stringify(p)).join('\n') + '\n');

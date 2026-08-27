@@ -41,18 +41,18 @@ await check('stripUngrounded: marks ids [unverified]', () => {
 
 await check('groundFinal: LLM rewrite removes the hallucinated id', async () => {
   const msgs = [{ role: 'tool', content: 'real listing 1157867537' }] as ChatMessage[];
-  const out = await groundFinal('fake 9999999999 and real 1157867537', msgs, fakeLLM('the real one is 1157867537'));
+  const { reply: out } = await groundFinal('fake 9999999999 and real 1157867537', msgs, fakeLLM('the real one is 1157867537'));
   assert.ok(!out.includes('9999999999'));
 });
 await check('groundFinal: strip fallback when LLM keeps hallucinating', async () => {
   const msgs = [{ role: 'tool', content: 'real 1157867537' }] as ChatMessage[];
-  const out = await groundFinal('cite 9999999999', msgs, fakeLLM('still cite 9999999999'));
+  const { reply: out } = await groundFinal('cite 9999999999', msgs, fakeLLM('still cite 9999999999'));
   assert.ok(out.includes('[unverified]') && !out.includes('9999999999'));
 });
 await check('groundFinal: grounded reply passes through, no LLM call', async () => {
   const msgs = [{ role: 'tool', content: 'real 1157867537' }] as ChatMessage[];
   let called = false;
-  const out = await groundFinal('the one is 1157867537', msgs, fakeLLM('X', () => { called = true; }));
+  const { reply: out } = await groundFinal('the one is 1157867537', msgs, fakeLLM('X', () => { called = true; }));
   assert.equal(out, 'the one is 1157867537');
   assert.equal(called, false);
 });

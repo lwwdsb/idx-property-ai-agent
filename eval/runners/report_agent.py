@@ -50,6 +50,23 @@ def main():
     # non-hitl tasks where steps notably exceed distinct tools (possible detour/redundant calls)
     detours = [t["id"] for t in traj if not t["hitl"] and t["steps"] - t["tools"] >= 3]
 
+    # runtime metrics (auto-recorded from the loop) — measures the agent SYSTEM
+    mets = [p["metrics"] for p in preds if p.get("metrics")]
+    runtime = {}
+    if mets:
+        tc = sum(m["toolCalls"] for m in mets)
+        te = sum(m["toolErrors"] for m in mets)
+        runtime = {
+            "n": len(mets),
+            "tool_success_rate": round((tc - te) / tc, 3) if tc else 1.0,
+            "avg_steps": round(sum(m["steps"] for m in mets) / len(mets), 1),
+            "avg_llm_calls": round(sum(m["llmCalls"] for m in mets) / len(mets), 1),
+            "loop_guard_rate": round(sum(1 for m in mets if m["loopGuards"] > 0) / len(mets), 3),
+            "budget_exhaust_rate": round(sum(1 for m in mets if m["budgetExhausted"]) / len(mets), 3),
+            "grounding_rewrites": sum(m["groundingRewrites"] for m in mets),
+            "grounding_stripped": sum(m["groundingStripped"] for m in mets),
+        }
+
     self_sent = meta.get("selfSentTotal")
     approve_sent, approve_expected = meta.get("approveSent"), meta.get("approveExpected")
     cancel_sent = meta.get("cancelSent")
@@ -65,6 +82,7 @@ def main():
         "grounding": {"checked": len(grounded), "grounded": grounded_ok, "ungrounded": ungrounded},
         "completion": completion,
         "trajectory": {"mean_steps": mean_steps, "detours": detours, "per_task": traj},
+        "runtime_metrics": runtime,
         "per_assertion": {k: {"passed": d[0], "total": d[1]} for k, d in kinds.items()},
         "tool_usage": {p["id"]: p["got"]["toolsUsed"] for p in preds},
         "failures": [{"task": p["task"], "hitl": p["hitl"], "got_tools": p["got"]["toolsUsed"],
@@ -85,6 +103,11 @@ def main():
               f"mean {completion['mean']}/2 · fully-done {completion['fully_done']}/{completion['n_judged']}")
     print(f"  TRAJECTORY: mean {mean_steps} steps/task; "
           + ("possible detours: " + ", ".join(detours) if detours else "no detours (steps ≈ distinct tools)"))
+    if runtime:
+        print(f"  RUNTIME METRICS: tool-success {runtime['tool_success_rate']} · avg-steps {runtime['avg_steps']} "
+              f"· avg-llm-calls {runtime['avg_llm_calls']} · loop-guard-rate {runtime['loop_guard_rate']} "
+              f"· budget-exhaust-rate {runtime['budget_exhaust_rate']} · grounding rewrites/stripped "
+              f"{runtime['grounding_rewrites']}/{runtime['grounding_stripped']}")
     print("  per-assertion: " + ", ".join(f"{k} {d['passed']}/{d['total']}" for k, d in result["per_assertion"].items()))
     print("  tools per task: " + "; ".join(f"{i}:[{','.join(t)}]" for i, t in result["tool_usage"].items()))
     if result["failures"]:

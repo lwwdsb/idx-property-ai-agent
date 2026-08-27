@@ -38,14 +38,15 @@ export function stripUngrounded(reply: string, ungrounded: string[]): string {
  * using only tool facts (retry ≤ MAX_GROUND_RETRY); if it still can't, deterministically
  * mark the unverifiable ids [unverified] + disclaim. Zero cost on the common path.
  */
-export async function groundFinal(reply: string, messages: ChatMessage[], llm: LLMClient): Promise<string> {
-  if (!llm.chatWithTools) return reply;
+export interface GroundResult { reply: string; rewrites: number; stripped: number; calls: number; }
+export async function groundFinal(reply: string, messages: ChatMessage[], llm: LLMClient): Promise<GroundResult> {
+  if (!llm.chatWithTools) return { reply, rewrites: 0, stripped: 0, calls: 0 };
   const blob = observationBlob(messages);
   let out = reply;
   let { ungrounded } = checkGrounding(out, blob);
-  let tries = 0;
+  let tries = 0, calls = 0;
   while (ungrounded.length && tries < MAX_GROUND_RETRY) {
-    tries++;
+    tries++; calls++;
     const fix = await llm.chatWithTools([
       ...messages,
       { role: 'assistant', content: out },
@@ -56,10 +57,12 @@ export async function groundFinal(reply: string, messages: ChatMessage[], llm: L
     out = fix.content || out;
     ungrounded = checkGrounding(out, blob).ungrounded;
   }
+  let stripped = 0;
   if (ungrounded.length) {
     logger.warn('grounding gate: stripping unverifiable ids', { ungrounded });
+    stripped = ungrounded.length;
     out = stripUngrounded(out, ungrounded)
       + "\n\n_(Some details couldn't be verified against the search results and were marked [unverified].)_";
   }
-  return out;
+  return { reply: out, rewrites: tries, stripped, calls };
 }

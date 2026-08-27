@@ -43,6 +43,19 @@ const SYSTEM = [
 const PROGRESSIVE_HINT = '\nTools are NOT all loaded up front. Call find_tools(query) to '
   + 'discover and enable the tools you need before you can call them.';
 
+/** Runtime metrics for measuring the agent system (all auto-recorded from the loop). */
+export interface AgentMetrics {
+  steps: number;               // loop iterations
+  toolCalls: number;           // total tool invocations
+  toolErrors: number;          // hallucinated/unknown tools or skill errors
+  loopGuards: number;          // times a repeat / per-tool-cap guard fired (thrashing signal)
+  llmCalls: number;            // model calls (cost proxy)
+  groundingRewrites: number;   // grounding gate LLM-rewrite passes
+  groundingStripped: number;   // grounding gate deterministic strips (rewrite couldn't fix)
+  budgetExhausted: boolean;
+  suspended: boolean;          // HITL suspend
+}
+
 export interface AgentResult {
   reply: string;
   trace: AgentTraceStep[];
@@ -51,6 +64,7 @@ export interface AgentResult {
   memory: WorkingMemory;
   runId?: number;
   pendingDraftId?: number;
+  metrics: AgentMetrics;
 }
 
 export interface RunAgentOptions {
@@ -94,31 +108,42 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
   const trace = state.trace;                     // persisted; accumulates across resumes
   const seen = new Set<string>();               // reset per drive (resume acceptable)
   const perTool = new Map<string, number>();
+  let toolCalls = 0, toolErrors = 0, loopGuards = 0, llmCalls = 0;
   const withMemory = (): ChatMessage[] =>
     isEmpty(mem) ? messages : [...messages, { role: 'system', content: renderMemory(mem) }];
+  const M = (extra: Partial<AgentMetrics> = {}): AgentMetrics => ({
+    steps: state.step, toolCalls, toolErrors, loopGuards, llmCalls,
+    groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, ...extra,
+  });
 
   while (state.step < budget) {
     state.step++;
     const turn = await llm.chatWithTools!(withMemory(), activeTools);
+    llmCalls++;
 
     if (!turn.toolCalls.length) {               // LLM chose to finish -> grounding gate -> done
-      const reply = await groundFinal(turn.content, messages, llm);
-      trace.push({ step: state.step, thought: reply });
+      const g = await groundFinal(turn.content, messages, llm);
+      llmCalls += g.calls;
+      trace.push({ step: state.step, thought: g.reply });
       await store.save(runId, { state, status: 'done' });
       logger.info('auto agent final', { userId, runId, steps: state.step });
-      return { reply, trace, steps: state.step, stopReason: 'final', memory: mem, runId };
+      return { reply: g.reply, trace, steps: state.step, stopReason: 'final', memory: mem, runId,
+        metrics: M({ groundingRewrites: g.rewrites, groundingStripped: g.stripped }) };
     }
 
     messages.push(turn.raw);
     let pendingDraft: number | undefined;
     for (const call of turn.toolCalls) {
+      toolCalls++;
       const sig = `${call.name}:${JSON.stringify(call.arguments)}`;
       const count = perTool.get(call.name) ?? 0;
       let observation: string;
       if (seen.has(sig)) {
+        loopGuards++;
         observation = `error: you already made this exact call to "${call.name}". `
           + 'Use the previous result, try a different action, or finish.';
       } else if (count >= MAX_PER_TOOL) {
+        loopGuards++;
         observation = `error: "${call.name}" has been called ${count} times already; it won't `
           + 'return anything new. Use the results you have or finish with a final answer.';
       } else if (call.name === 'find_tools') {
@@ -136,6 +161,7 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
         perTool.set(call.name, count + 1);
         const res = await executeTool(registry, call.name, call.arguments, { userId, llm });
         observation = res.observation;
+        if (observation.startsWith('error')) toolErrors++;
         recordStep(mem, call.name, call.arguments, observation);
         if (res.draftId !== undefined) pendingDraft = res.draftId;   // outbound -> HITL interrupt
       }
@@ -151,6 +177,7 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
         reply: `⏸ I drafted email #${pendingDraft} and paused for your approval. `
           + `Reply "approve ${pendingDraft}" to send it and let me finish, or "cancel ${pendingDraft}".`,
         trace, steps: state.step, stopReason: 'awaiting_approval', memory: mem, runId, pendingDraftId: pendingDraft,
+        metrics: M({ suspended: true }),
       };
     }
   }
@@ -160,11 +187,13 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
     [...withMemory(), { role: 'user', content: 'Stop using tools now and summarize your findings for the user.' }],
     [],
   );
+  llmCalls++;
   await store.save(runId, { state, status: 'done' });
   logger.warn('auto agent hit step budget', { userId, runId, budget });
   return {
     reply: wrap.content || 'I ran out of steps before finishing — could you narrow the task?',
     trace, steps: state.step, stopReason: 'budget', memory: mem, runId,
+    metrics: M({ budgetExhausted: true }),
   };
 }
 
@@ -212,7 +241,9 @@ export async function resumeAgentRun(runId: number, opts: ResumeAgentOptions): P
   if (!run) throw new Error(`agent run ${runId} not found`);
   if (run.status !== 'awaiting_approval') {
     return { reply: `Run #${runId} is not awaiting approval (status: ${run.status}).`,
-      trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId };
+      trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId,
+      metrics: { steps: run.state.step, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
+        groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false } };
   }
   const state = run.state;
   const draftId = run.pendingDraftId;

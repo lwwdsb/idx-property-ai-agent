@@ -16,7 +16,7 @@
  * per-tool call cap.
  */
 import { logger } from '../../logger.js';
-import type { LLMClient, ChatMessage, ToolSpec } from '../../llm/client.js';
+import type { LLMClient, ChatMessage, ToolSpec, ChatTurn } from '../../llm/client.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 import { toolSpecs, executeTool, FIND_TOOLS_SPEC, findTools } from './tools.js';
 import { freshMemory, recordStep, renderMemory, isEmpty, type WorkingMemory } from './memory.js';
@@ -61,7 +61,7 @@ export interface AgentResult {
   reply: string;
   trace: AgentTraceStep[];
   steps: number;
-  stopReason: 'final' | 'budget' | 'awaiting_approval';
+  stopReason: 'final' | 'budget' | 'awaiting_approval' | 'error';
   memory: WorkingMemory;
   runId?: number;
   pendingDraftId?: number;
@@ -119,9 +119,27 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
     elapsedMs: Date.now() - t0, ...extra,
   });
 
+  // graceful abort: an LLM call failed even after retry + circuit breaker -> don't crash.
+  // Checkpoint the state (kept resumable) and return a friendly reply instead of throwing.
+  const abort = async (e: unknown): Promise<AgentResult> => {
+    logger.error('auto agent aborted (dependency failed after retries)',
+      { userId, runId, step: state.step, error: String((e as Error)?.message ?? e) });
+    await store.save(runId, { state, status: 'running' });
+    return {
+      reply: "Sorry — I couldn't finish this right now (a service is busy or unavailable). "
+        + 'Your progress is saved; please try again shortly.',
+      trace, steps: state.step, stopReason: 'error', memory: mem, runId, metrics: M(),
+    };
+  };
+
   while (state.step < budget) {
     state.step++;
-    const turn = await llm.chatWithTools!(withMemory(), activeTools);
+    let turn: ChatTurn;
+    try {
+      turn = await llm.chatWithTools!(withMemory(), activeTools);
+    } catch (e) {
+      return abort(e);   // LLM down after retry+breaker -> graceful stop, checkpoint saved
+    }
     llmCalls++;
 
     if (!turn.toolCalls.length) {               // LLM chose to finish -> grounding gate -> done
@@ -186,10 +204,15 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
   }
 
   // budget exhausted -> force a best-effort summary with no tools
-  const wrap = await llm.chatWithTools!(
-    [...withMemory(), { role: 'user', content: 'Stop using tools now and summarize your findings for the user.' }],
-    [],
-  );
+  let wrap: ChatTurn;
+  try {
+    wrap = await llm.chatWithTools!(
+      [...withMemory(), { role: 'user', content: 'Stop using tools now and summarize your findings for the user.' }],
+      [],
+    );
+  } catch (e) {
+    return abort(e);
+  }
   llmCalls++;
   await store.save(runId, { state, status: 'done' });
   logger.warn('auto agent hit step budget', { userId, runId, budget });

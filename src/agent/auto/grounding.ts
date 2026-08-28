@@ -8,7 +8,7 @@
  * would invent to fake a listing, and the one it won't rewrite. Prices/percentages are
  * out of scope for now (commas + "$1.22M" shorthand make matching noisy).
  */
-import type { ChatMessage, LLMClient } from '../../llm/client.js';
+import type { ChatMessage, LLMClient, ChatTurn } from '../../llm/client.js';
 import { logger } from '../../logger.js';
 
 const MAX_GROUND_RETRY = 2;   // LLM-rewrite attempts before deterministic strip
@@ -47,13 +47,18 @@ export async function groundFinal(reply: string, messages: ChatMessage[], llm: L
   let tries = 0, calls = 0;
   while (ungrounded.length && tries < MAX_GROUND_RETRY) {
     tries++; calls++;
-    const fix = await llm.chatWithTools([
-      ...messages,
-      { role: 'assistant', content: out },
-      { role: 'user', content: `Your answer cites listing ids not found in any tool result: ${ungrounded.join(', ')}. `
-        + 'Rewrite it using ONLY facts from the tool results above; remove any listing or number you cannot cite. '
-        + 'Return just the corrected answer.' },
-    ], []);
+    let fix: ChatTurn;
+    try {
+      fix = await llm.chatWithTools([
+        ...messages,
+        { role: 'assistant', content: out },
+        { role: 'user', content: `Your answer cites listing ids not found in any tool result: ${ungrounded.join(', ')}. `
+          + 'Rewrite it using ONLY facts from the tool results above; remove any listing or number you cannot cite. '
+          + 'Return just the corrected answer.' },
+      ], []);
+    } catch {
+      break;   // LLM unavailable -> skip rewrite, fall through to deterministic strip (乙)
+    }
     out = fix.content || out;
     ungrounded = checkGrounding(out, blob).ungrounded;
   }

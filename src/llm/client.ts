@@ -9,6 +9,10 @@
 import { config } from '../config.js';
 import { logger } from '../logger.js';
 import { FILTER_KEYS, type FilterPatch, type SearchFilter } from '../search/filters.js';
+import { withResilience, CircuitBreaker } from '../resilience/resilience.js';
+
+// one breaker for the LLM provider (shared across all client instances/methods)
+const llmBreaker = new CircuitBreaker(5, 20_000);
 
 /** One step of a multi-skill plan: which skill + the self-contained sub-query for it. */
 export interface PlanStep { skill: string; query: string; }
@@ -123,24 +127,26 @@ export function getLLMClient(): LLMClient {
     };
   }
   async function chatJSON(system: string, user: string): Promise<unknown> {
-    const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({
-        model,
-        temperature: 0,
-        messages: [
-          { role: 'system', content: system },
-          { role: 'user', content: user },
-        ],
-        response_format: { type: 'json_object' },
-      }),
-    });
-    if (!res.ok) {
-      throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-    }
-    const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
-    return extractJson(data.choices?.[0]?.message?.content ?? '{}');
+    return withResilience(async () => {
+      const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({
+          model,
+          temperature: 0,
+          messages: [
+            { role: 'system', content: system },
+            { role: 'user', content: user },
+          ],
+          response_format: { type: 'json_object' },
+        }),
+      });
+      if (!res.ok) {
+        throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      }
+      const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      return extractJson(data.choices?.[0]?.message?.content ?? '{}');
+    }, { name: 'llm/chatJSON', timeoutMs: 30_000, retries: 2, breaker: llmBreaker });
   }
 
   return {
@@ -173,38 +179,40 @@ export function getLLMClient(): LLMClient {
       return out;
     },
     async chatWithTools(messages: ChatMessage[], tools: ToolSpec[]): Promise<ChatTurn> {
-      const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({
-          model,
-          temperature: 0,
-          messages,
-          tools: tools.map((t) => ({ type: 'function', function: t })),
-          tool_choice: 'auto',
-        }),
-      });
-      if (!res.ok) {
-        throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
-      }
-      const data = (await res.json()) as {
-        choices?: Array<{ message?: { content?: string | null; tool_calls?: unknown[] } }>;
-      };
-      const msg = data.choices?.[0]?.message ?? { content: '' };
-      const rawCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
-      const toolCalls: ToolCall[] = rawCalls.map((tc) => {
-        const c = tc as { id?: string; function?: { name?: string; arguments?: string } };
-        return {
-          id: c.id ?? '',
-          name: c.function?.name ?? '',
-          arguments: extractJson(c.function?.arguments ?? '{}') as Record<string, unknown>,
+      return withResilience(async () => {
+        const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
+          body: JSON.stringify({
+            model,
+            temperature: 0,
+            messages,
+            tools: tools.map((t) => ({ type: 'function', function: t })),
+            tool_choice: 'auto',
+          }),
+        });
+        if (!res.ok) {
+          throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
+        }
+        const data = (await res.json()) as {
+          choices?: Array<{ message?: { content?: string | null; tool_calls?: unknown[] } }>;
         };
-      });
-      return {
-        content: msg.content ?? '',
-        toolCalls,
-        raw: { role: 'assistant', content: msg.content ?? '', tool_calls: msg.tool_calls },
-      };
+        const msg = data.choices?.[0]?.message ?? { content: '' };
+        const rawCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
+        const toolCalls: ToolCall[] = rawCalls.map((tc) => {
+          const c = tc as { id?: string; function?: { name?: string; arguments?: string } };
+          return {
+            id: c.id ?? '',
+            name: c.function?.name ?? '',
+            arguments: extractJson(c.function?.arguments ?? '{}') as Record<string, unknown>,
+          };
+        });
+        return {
+          content: msg.content ?? '',
+          toolCalls,
+          raw: { role: 'assistant', content: msg.content ?? '', tool_calls: msg.tool_calls },
+        };
+      }, { name: 'llm/chatWithTools', timeoutMs: 45_000, retries: 2, breaker: llmBreaker });
     },
   };
 }

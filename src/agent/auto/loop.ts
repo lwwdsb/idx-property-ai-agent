@@ -162,7 +162,7 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
       } else {
         seen.add(sig);
         perTool.set(call.name, count + 1);
-        const res = await executeTool(registry, call.name, call.arguments, { userId, llm });
+        const res = await executeTool(registry, call.name, call.arguments, { userId, llm, memConstraints: mem.constraints });
         observation = res.observation;
         if (observation.startsWith('error')) toolErrors++;
         recordStep(mem, call.name, call.arguments, observation);

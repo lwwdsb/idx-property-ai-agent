@@ -9,6 +9,7 @@
  * (fed back so the model can recover), never a crash.
  */
 import { sanitizeFilter, type ToolSpec, type LLMClient, type SearchFilter } from '../../llm/client.js';
+import { mergeFilter, type FilterPatch } from '../../search/filters.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 
 /** Shared JSON Schema. `query` is the self-contained sub-task; slots sharpen precision. */
@@ -70,7 +71,7 @@ export function findTools(registry: SkillRegistry, query: string): ToolSpec[] {
   return hits.length ? hits : specs;
 }
 
-export interface ToolRunCtx { userId: string; llm?: LLMClient; }
+export interface ToolRunCtx { userId: string; llm?: LLMClient; memConstraints?: SearchFilter; }
 /** ALWAYS resolves; `draftId` is set when an email tool produced a pending draft
  * (the loop's HITL interrupt point). Errors come back as an observation, never a throw. */
 export interface ToolResult { observation: string; draftId?: number; }
@@ -88,8 +89,10 @@ export async function executeTool(
   }
   const query = typeof args.query === 'string' ? args.query : '';
   try {
-    // sanitizeFilter only ever sets valid values (never null), so the cast is safe.
-    const filter = sanitizeFilter(args) as SearchFilter;
+    // filter = LLM args merged OVER accumulated memory constraints (args take priority);
+    // sanitizeFilter only sets valid values (never null), so the casts are safe.
+    const argFilter = sanitizeFilter(args) as FilterPatch;
+    const filter = ctx.memConstraints ? mergeFilter(ctx.memConstraints, argFilter) : (argFilter as SearchFilter);
     const r = await skill.run({ userId: ctx.userId, message: query, filter, llm: ctx.llm, args });
     // email returns the created draft as `data`; surface its id so the loop can suspend for HITL.
     const d = r.data as { id?: unknown } | undefined;

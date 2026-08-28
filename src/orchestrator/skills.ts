@@ -155,8 +155,11 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
             // Qdrant/service down -> degrade to MySQL structured search (乙)
           }
         }
-        // Pure structured (or fallback): multi-turn MySQL search (LLM-aware parse).
-        const turn = await handleSearchTurn(ctx.userId, ctx.message, { llm: ctx.llm });
+        // Pure structured: deterministic mode re-parses (multi-turn); auto mode passes the
+        // filter the LLM (+ memory) already extracted, so it isn't re-parsed / no regex fallback.
+        const turn = await handleSearchTurn(ctx.userId, ctx.message, {
+          llm: ctx.llm, filter: ctx.args ? ctx.filter : undefined,
+        });
         // proximity: CODE decides to call maps because the slot exists (not the LLM).
         if (ctx.filter.proximity && turn.rows?.length) {
           const ranked = await applyProximity(turn.rows, ctx.filter.proximity);

@@ -8,7 +8,7 @@
  */
 import { parseQuery } from '../search/parseQuery.js';
 import { isKnownCity } from '../search/cityDictionary.js';
-import { summarizeFilter, type SearchFilter } from '../search/filters.js';
+import { summarizeFilter, mergeFilter, type SearchFilter, type FilterPatch } from '../search/filters.js';
 import { searchActiveListings, searchSignal } from '../search/searchListings.js';
 import { formatListingCard, type ListingRow } from '../search/listingRow.js';
 import { defaultSessionStore, freshSession, type SessionStore } from './session.js';
@@ -27,6 +27,10 @@ export interface TurnOptions {
   store?: SessionStore;
   llm?: LLMClient;
   pageSize?: number;
+  /** Auto mode: use this already-extracted filter (LLM + memory) directly, skipping the
+   * regex/LLM parse of the message. No fallback parse — what the LLM couldn't extract,
+   * regex won't either. Deterministic mode leaves this undefined (parses as before). */
+  filter?: SearchFilter;
 }
 
 const RESET_RE = /\b(start over|reset|new search|restart|clear)\b/i;
@@ -54,8 +58,10 @@ export async function handleSearchTurn(
 
   const session = (await store.get(userId)) ?? freshSession();
 
-  // parse this turn as a patch onto the running filter
-  const parsed = await parseQuery(message, { base: session.filter, llm: opts.llm, isKnownCity });
+  // parse this turn as a patch onto the running filter — UNLESS auto already extracted it
+  const parsed = opts.filter !== undefined
+    ? { filter: mergeFilter(session.filter, opts.filter as FilterPatch), confidence: 'high' as const, clarification: '' }
+    : await parseQuery(message, { base: session.filter, llm: opts.llm, isKnownCity });
   session.filter = parsed.filter;
   session.step += 1;
 

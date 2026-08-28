@@ -15,7 +15,7 @@ import { approveAndSend, cancelDraft, type SendFn } from '../../email/email.js';
 import type { DraftStore } from '../../email/drafts.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 import type { LLMClient } from '../../llm/client.js';
-import { runAgent, resumeAgentRun } from './loop.js';
+import { runAgent, resumeAgentRun, retryAgentRun } from './loop.js';
 import { loadProfile, saveProfile, profileHint, preferredFilter, selectMemories, episodicMemories, touchMemory, learnFromFilter } from '../../memory/profile.js';
 import { parseQuery } from '../../search/parseQuery.js';
 import { isKnownCity } from '../../search/cityDictionary.js';
@@ -25,6 +25,7 @@ const APPROVE = /^\s*(?:approve|send it|批准|通过|确认发送|确认)\s*#?(
 const CANCEL = /^\s*(?:cancel|discard|取消|作废|不发)\s*#?(\d+)\s*$/i;
 const AUTO = /^\s*\/auto\s+([\s\S]+)$/i;
 const STATUS = /^\s*(?:status|进度|状态)\s*#?(\d+)?\s*$/i;
+const RETRY = /^\s*(?:retry|重试|再试)\s*#?(\d+)?\s*$/i;
 
 /** Human-readable progress of a run — the persisted trace makes this observable/replayable. */
 export function renderAgentStatus(run: AgentRun): string {
@@ -64,6 +65,14 @@ export async function handleAgentMessage(
     const run = id ? await runStore.get(id) : await runStore.latestForUser(userId);
     if (!run) return id ? `No agent run #${id}.` : 'No agent runs yet.';
     return renderAgentStatus(run);
+  }
+
+  // 0b. retry an interrupted run (dependency had failed) from its checkpoint
+  const rt = message.match(RETRY);
+  if (rt) {
+    const id = rt[1] ? Number(rt[1]) : (await runStore.latestForUser(userId))?.id;
+    if (!id) return 'No run to retry.';
+    return (await retryAgentRun(id, { registry, llm, store: runStore })).reply;
   }
 
   // 1. approve/cancel that belongs to a suspended run -> resume it

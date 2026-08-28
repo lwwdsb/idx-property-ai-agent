@@ -12,7 +12,7 @@ import { getPool } from '../../db.js';
 import type { ChatMessage } from '../../llm/client.js';
 import type { WorkingMemory } from './memory.js';
 
-export type RunStatus = 'running' | 'awaiting_approval' | 'done' | 'cancelled';
+export type RunStatus = 'running' | 'awaiting_approval' | 'done' | 'cancelled' | 'interrupted';
 
 /** One recorded loop step (defined here, not loop.ts, so state can carry it without a cycle). */
 export interface AgentTraceStep {

@@ -124,7 +124,7 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
   const abort = async (e: unknown): Promise<AgentResult> => {
     logger.error('auto agent aborted (dependency failed after retries)',
       { userId, runId, step: state.step, error: String((e as Error)?.message ?? e) });
-    await store.save(runId, { state, status: 'running' });
+    await store.save(runId, { state, status: 'interrupted' });   // resumable via retryAgentRun
     return {
       reply: "Sorry — I couldn't finish this right now (a service is busy or unavailable). "
         + 'Your progress is saved; please try again shortly.',
@@ -284,5 +284,33 @@ export async function resumeAgentRun(runId: number, opts: ResumeAgentOptions): P
   return driveLoop(state, {
     userId: run.userId, registry, llm, store, runId,
     budget: state.step + (opts.maxSteps ?? MAX_STEPS),
+  });
+}
+
+export interface RetryAgentOptions {
+  registry: SkillRegistry;
+  llm: LLMClient;
+  store?: AgentRunStore;
+  maxSteps?: number;
+}
+
+/** Resume an INTERRUPTED run (a dependency had failed) from its last checkpoint. No message is
+ * appended — just continue the loop, assuming the service is back. This is the last resilience
+ * link: retry+breaker (client) -> graceful abort+checkpoint (loop) -> retry from checkpoint (here). */
+export async function retryAgentRun(runId: number, opts: RetryAgentOptions): Promise<AgentResult> {
+  const { registry, llm } = opts;
+  const store = opts.store ?? new MySqlAgentRunStore();
+  const run = await store.get(runId);
+  if (!run) throw new Error(`agent run ${runId} not found`);
+  if (run.status !== 'interrupted') {
+    return { reply: `Run #${runId} is not interrupted (status: ${run.status}); nothing to retry.`,
+      trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId,
+      metrics: { steps: run.state.step, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
+        groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, elapsedMs: 0 } };
+  }
+  await store.save(runId, { status: 'running' });
+  return driveLoop(run.state, {
+    userId: run.userId, registry, llm, store, runId,
+    budget: run.state.step + (opts.maxSteps ?? MAX_STEPS),
   });
 }

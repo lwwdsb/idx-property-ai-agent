@@ -29,6 +29,7 @@ export const SHARED_TOOL_SCHEMA: Record<string, unknown> = {
     propertyType: { type: 'string', enum: ['condo', 'townhouse', 'single-family'] },
     pool: { type: 'boolean' },
     minSqft: { type: 'number' },
+    semantic: { type: 'string', description: 'free-text style/features NOT covered by the structured fields, e.g. "ocean view craftsman", "bright open floor plan"' },
   },
   required: ['query'],
 };

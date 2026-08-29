@@ -132,7 +132,10 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       description: 'Search active listings by city, beds/baths, budget, type, pool, or free-text style (e.g. "ocean view craftsman").',
       async run(ctx) {
         // Soft/semantic content -> hybrid (Qdrant: hard filters + dense+BM25).
-        const semantic = extractSemanticText(ctx.message, ctx.filter);
+        // auto mode: use the LLM's own `semantic` field (it already split structured vs free-text);
+        // deterministic mode — or if the LLM omitted it — falls back to the regex extractor.
+        const argSem = ctx.args && typeof ctx.args.semantic === 'string' ? ctx.args.semantic.trim() : '';
+        const semantic = argSem || extractSemanticText(ctx.message, ctx.filter);
         if (semantic) {
           try {
             const results = await bridge.search({

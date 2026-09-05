@@ -14,6 +14,8 @@ import { draftEmail, previewDraft } from '../email/email.js';
 import { weeklyMarketReport } from '../email/templates.js';
 import { SkillRegistry } from './skill.js';
 import type { PythonBridge, SemanticListing } from './bridge.js';
+import { expandQuery, rrfFuse } from '../search/multiQuery.js';
+import { config } from '../config.js';
 
 /** Normalized propertyType -> physical L_Type_ value (matches the Qdrant payload). */
 const TYPE_DB: Record<string, string> = {
@@ -128,23 +130,34 @@ function formatSemanticResults(results: SemanticListing[], filter: SearchFilter,
 export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new MySqlDraftStore()): SkillRegistry {
   return new SkillRegistry()
     .register({
-      name: 'search', parallelSafe: true,
+      name: 'search',
       description: 'Search active listings by city, beds/baths, budget, type, pool, or free-text style (e.g. "ocean view craftsman").',
       async run(ctx) {
         // Soft/semantic content -> hybrid (Qdrant: hard filters + dense+BM25).
-        const semantic = extractSemanticText(ctx.message, ctx.filter);
+        // auto mode: use the LLM's own `semantic` field (it already split structured vs free-text);
+        // deterministic mode — or if the LLM omitted it — falls back to the regex extractor.
+        const argSem = ctx.args && typeof ctx.args.semantic === 'string' ? ctx.args.semantic.trim() : '';
+        const semantic = argSem || extractSemanticText(ctx.message, ctx.filter);
         if (semantic) {
           try {
-            const results = await bridge.search({
-              text: semantic,
+            const hardFilter = {
               city: ctx.filter.city ?? null,
               max_price: ctx.filter.maxPrice ?? null,
               min_price: ctx.filter.minPrice ?? null,
               min_beds: ctx.filter.beds ?? null,
               pool: ctx.filter.pool,   // tri-state: true=has / false=no / undefined=don't care
               ptype: ctx.filter.propertyType ? TYPE_DB[ctx.filter.propertyType] ?? null : null,
-              k: 5,
-            });
+              k: 10,   // service does coarse hybrid top-30 -> cross-encoder rerank -> top-10
+            };
+            // Opt-in multi-query, AUTO mode only (ctx.args): expand into phrasings, retrieve
+            // each, RRF-fuse (融合不选择). The deterministic path stays the lean single call —
+            // rewrite is auto's capability-first spend, not the low-cost/high-robustness floor.
+            const variants = config.retrieval.multiQuery && ctx.args
+              ? await expandQuery(semantic, ctx.llm) : [semantic];
+            const lists = await Promise.all(variants.map((text) => bridge.search({ ...hardFilter, text })));
+            const results = variants.length > 1
+              ? rrfFuse(lists, (s) => s.listing_id ?? s.mls ?? s.address ?? '').slice(0, hardFilter.k)
+              : lists[0] ?? [];
             if (results.length) {
               const rows = results.map(toListingRow);
               await rememberResults(ctx.userId, rows);   // so "跟第一个类似的" can reference these
@@ -155,8 +168,11 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
             // Qdrant/service down -> degrade to MySQL structured search (乙)
           }
         }
-        // Pure structured (or fallback): multi-turn MySQL search (LLM-aware parse).
-        const turn = await handleSearchTurn(ctx.userId, ctx.message, { llm: ctx.llm });
+        // Pure structured: deterministic mode re-parses (multi-turn); auto mode passes the
+        // filter the LLM (+ memory) already extracted, so it isn't re-parsed / no regex fallback.
+        const turn = await handleSearchTurn(ctx.userId, ctx.message, {
+          llm: ctx.llm, filter: ctx.args ? ctx.filter : undefined,
+        });
         // proximity: CODE decides to call maps because the slot exists (not the LLM).
         if (ctx.filter.proximity && turn.rows?.length) {
           const ranked = await applyProximity(turn.rows, ctx.filter.proximity);
@@ -173,7 +189,7 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       },
     })
     .register({
-      name: 'market', parallelSafe: true,
+      name: 'market',
       description: 'City market stats: median price, $/sqft, days on market, sold-to-list, trend.',
       async run(ctx) {
         if (!ctx.filter.city) {
@@ -184,31 +200,27 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       },
     })
     .register({
-      name: 'recommend', parallelSafe: true,
-      description: 'Recommend homes similar to one the user references — by position ("the first one" / "第2个"), address, or an explicit MLS id — with a price check.',
+      name: 'recommend',
+      description: 'Given a listing you like (by id/MLS), recommend similar homes with a price check.',
       async run(ctx) {
-        // resolve WITHOUT making the user type a raw id: an explicit id, else a reference
-        // ("第一个" / an address) into the last shown listings (session memory).
-        let id = extractId(ctx.message);
+        const id = extractId(ctx.message);
         if (!id) {
-          const session = await defaultSessionStore.get(ctx.userId);
-          id = resolveListingRef(ctx.message, session?.lastResults);
-        }
-        if (!id) {
-          return { skill: 'recommend', reply: 'Which listing? Search first, then say e.g. "跟第一个类似的" / "more like #2" — or send its MLS number.' };
+          return { skill: 'recommend', reply: 'Which listing? Send its id / MLS number.' };
         }
         return { skill: 'recommend', reply: await bridge.recommend(id) };
       },
     })
     .register({
-      name: 'knowledge', parallelSafe: true,
+      name: 'knowledge',
       description: 'Answer real-estate questions (DOM, $/sqft, comps, field meanings) with sources.',
       async run(ctx) {
-        return { skill: 'knowledge', reply: await bridge.rag(ctx.message) };
+        // HyDE: opt-in + AUTO only (ctx.args). Deterministic RAG stays the plain single call.
+        const hyde = config.retrieval.hyde && !!ctx.args;
+        return { skill: 'knowledge', reply: await bridge.rag(ctx.message, hyde) };
       },
     })
     .register({
-      name: 'email', parallelSafe: true,
+      name: 'email',
       description: 'Draft an outbound email (e.g. a market report) to a recipient — always pending human approval, never auto-sent.',
       async run(ctx) {
         const recipients = extractEmails(ctx.message);

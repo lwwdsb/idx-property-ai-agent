@@ -20,6 +20,10 @@ export interface SkillContext {
   /** In a multi-skill plan, the outputs of skills already run (the parallel batch +
    * earlier serial steps). Available to serially-run skills so a dependent one can use them. */
   priorResults?: SkillResult[];
+  /** Auto/agent mode only: the raw structured tool arguments the LLM supplied (beyond
+   * what maps to `filter`) — e.g. a custom email subject/body. Undefined in router mode,
+   * so deterministic behavior is unchanged. */
+  args?: Record<string, unknown>;
 }
 
 export interface SkillResult {
@@ -37,6 +41,9 @@ export interface Skill {
    * SEQUENTIALLY (the safe default) after that batch, and can read ctx.priorResults —
    * so "unsure whether it's safe to parallelize" => don't mark it => serial. */
   parallelSafe?: boolean;
+  /** Auto/agent mode: JSON Schema for THIS tool's parameters. Falls back to a shared
+   * schema when absent — lets a skill (e.g. email) declare bespoke params like subject/body. */
+  paramSchema?: Record<string, unknown>;
   run(ctx: SkillContext): Promise<SkillResult>;
 }
 

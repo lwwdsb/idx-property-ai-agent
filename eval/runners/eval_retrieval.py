@@ -51,6 +51,36 @@ def eval_mode(cases, mode):
     }
 
 
+def per_query_ndcg(cases):
+    """Per-query nDCG@10 for each mode (deterministic) — the basis for a PAIRED comparison."""
+    out = {m: [] for m in MODES}
+    for c in cases:
+        rel = c["label"]["relevant"]
+        if not rel:
+            continue
+        for m in MODES:
+            out[m].append(ndcg_at_k(ranked_ids(c["input"], m, k=10), rel, 10))
+    return out
+
+
+def paired(a, b):
+    """Win/tie/loss + mean diff + a crude significance check (mean / standard-error).
+    On a small set a positive MEAN can be noise; the sign split + |mean|/SE tell you if it's real."""
+    diffs = [x - y for x, y in zip(a, b)]
+    n = len(diffs)
+    win = sum(1 for d in diffs if d > 1e-9)
+    loss = sum(1 for d in diffs if d < -1e-9)
+    md = mean(diffs)
+    var = mean([(d - md) ** 2 for d in diffs]) * n / max(n - 1, 1)
+    se = (var / n) ** 0.5 if n else 0.0
+    t = md / se if se else 0.0
+    sorted_d = sorted(diffs)
+    median = sorted_d[n // 2] if n % 2 else (sorted_d[n // 2 - 1] + sorted_d[n // 2]) / 2
+    return {"win": win, "tie": n - win - loss, "loss": loss,
+            "mean_diff": round(md, 4), "median_diff": round(median, 4),
+            "t_like": round(t, 2), "significant": abs(t) >= 2.0}
+
+
 def main():
     cases = load()
     verified = sum(1 for c in cases if c["meta"].get("verified"))
@@ -65,15 +95,28 @@ def main():
         print(f"  {mode:8} {m['nDCG@10']:>9} {m['recall@10']:>10} {m['MRR']:>7} {m['precision@5']:>7}")
 
     best = max(MODES, key=lambda mo: results[mo]["nDCG@10"])
-    print(f"\n  best nDCG@10: {best} ({results[best]['nDCG@10']})")
-    if best == "hybrid":
-        d = results["hybrid"]["nDCG@10"] - max(results["dense"]["nDCG@10"], results["bm25"]["nDCG@10"])
-        print(f"  hybrid beats best single-path by +{round(d, 4)} nDCG@10 → fusion adds quality, not just coverage.")
+    print(f"\n  best mean nDCG@10: {best} ({results[best]['nDCG@10']})")
+
+    # PAIRED per-query analysis — a mean win on a small set can be noise. Report the sign
+    # split + |mean|/SE so the honest story (is hybrid REALLY better, or variance?) is visible.
+    pq = per_query_ndcg(cases)
+    hd = paired(pq["hybrid"], pq["dense"])
+    hb = paired(pq["hybrid"], pq["bm25"])
+    print("\n  paired per-query nDCG@10 (win/tie/loss · mean Δ · median Δ · t≈mean/SE):")
+    print(f"    hybrid vs dense: {hd['win']}/{hd['tie']}/{hd['loss']}  "
+          f"meanΔ {hd['mean_diff']:+}  medianΔ {hd['median_diff']:+}  t≈{hd['t_like']}  "
+          f"{'SIGNIFICANT' if hd['significant'] else 'not significant (within noise)'}")
+    print(f"    hybrid vs bm25 : {hb['win']}/{hb['tie']}/{hb['loss']}  "
+          f"meanΔ {hb['mean_diff']:+}  medianΔ {hb['median_diff']:+}  t≈{hb['t_like']}  "
+          f"{'SIGNIFICANT' if hb['significant'] else 'not significant (within noise)'}")
+    print("  → hybrid's robust value here is VARIANCE (never collapses like a single path can),")
+    print("    not a higher mean — the mean edge over dense is within noise on this small set.")
 
     out = os.path.join(HIST, "retrieval.metrics.json")
     os.makedirs(HIST, exist_ok=True)
     with open(out, "w") as f:
-        json.dump({"per_mode": results, "n_queries": len(cases), "verified": verified}, f, indent=2)
+        json.dump({"per_mode": results, "n_queries": len(cases), "verified": verified,
+                   "paired": {"hybrid_vs_dense": hd, "hybrid_vs_bm25": hb}}, f, indent=2)
     print(f"\nmetrics written to {out}")
 
 

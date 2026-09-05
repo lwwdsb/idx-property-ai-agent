@@ -60,17 +60,40 @@ class RagIndex:
         m = np.array([v for v in vecs], dtype=np.float32)
         self.mat = m / (np.linalg.norm(m, axis=1, keepdims=True) + 1e-9)
 
-    def retrieve(self, question, k=3):
-        q = list(get_dense().embed([question]))[0].astype(np.float32)
+    def retrieve(self, question, k=3, embed_text=None):
+        # embed_text overrides what we EMBED (not what we answer) — used by HyDE to embed a
+        # hypothetical passage instead of the terse question. Default: embed the question.
+        q = list(get_dense().embed([embed_text or question]))[0].astype(np.float32)
         q = q / (np.linalg.norm(q) + 1e-9)
         scores = self.mat @ q
         idx = np.argsort(-scores)[:k]
         return [{**self.chunks[i], "score": float(scores[i])} for i in idx]
 
 
-def answer(question, index=None, k=3, chat_fn=chat):
+# HyDE prompt kept module-level so eval and runtime generate identical hypotheticals.
+HYDE_SYSTEM = "You are a precise real-estate glossary author. Write plain factual definitions."
+HYDE_PROMPT = ("Write a 1-2 sentence factual, glossary-style answer to this real-estate "
+               "question. State the definition directly; do not hedge or ask for clarification.\n\n"
+               "Question: {q}")
+
+
+def hyde_passage(question, chat_fn=chat):
+    """HyDE: generate a HYPOTHETICAL answer passage. Embedding this prose (which looks like
+    the corpus) often matches the KB better than the terse keyword-y question. Returns None
+    when no LLM is configured / on error → callers degrade to embedding the raw question (乙)."""
+    return chat_fn(HYDE_PROMPT.format(q=question), system=HYDE_SYSTEM)
+
+
+def answer(question, index=None, k=3, chat_fn=chat, hyde=False):
     index = index or RagIndex()
-    hits = index.retrieve(question, k)
+    # HyDE (opt-in): retrieve using question + hypothetical passage blended. Blending (not
+    # pure-hypo) keeps a bad hypothetical from fully derailing retrieval — verified by eval.
+    embed_text = None
+    if hyde:
+        hypo = hyde_passage(question, chat_fn)
+        if hypo:
+            embed_text = f"{question}\n{hypo}"
+    hits = index.retrieve(question, k, embed_text=embed_text)
     context = "\n\n".join(f"[{h['source']}]\n{h['text']}" for h in hits)
     sources = [h["source"] for h in hits]
 

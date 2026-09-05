@@ -64,6 +64,16 @@ export function filledCount(f: SearchFilter): number {
   return FILTER_KEYS.filter((k) => f[k] !== undefined).length;
 }
 
+/**
+ * Structural listing constraints only (beds/baths/price/type/sqft/pool/proximity) — excludes
+ * `keywords`, which is free-text/semantic residue. Used to decide "this is a search that just
+ * needs a city": a real constraint (e.g. "3 bed under 1M") qualifies, but a bare keyword blob
+ * (e.g. an LLM parse hallucinating "joke") does not — that should defer to the OOD gate.
+ */
+export function structuralCount(f: SearchFilter): number {
+  return FILTER_KEYS.filter((k) => k !== 'keywords' && k !== 'city' && f[k] !== undefined).length;
+}
+
 /** Human-readable summary for the "current filter" line shown to users (Q12 transparency). */
 export function summarizeFilter(f: SearchFilter): string {
   const parts: string[] = [];

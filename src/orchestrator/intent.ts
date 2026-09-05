@@ -7,7 +7,7 @@
  */
 import { parseQuery } from '../search/parseQuery.js';
 import { isKnownCity } from '../search/cityDictionary.js';
-import { filledCount, type SearchFilter } from '../search/filters.js';
+import { structuralCount, type SearchFilter } from '../search/filters.js';
 import type { LLMClient } from '../llm/client.js';
 import type { IntentGuess } from './bridge.js';
 
@@ -86,9 +86,12 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   if (searchable) {
     return { intent: 'search', confidence: 'high', filter: parsed.filter };
   }
-  // some constraints, OR a named-but-unserveable city -> it's a search that needs a
-  // valid city. Ask (with the specific reason) instead of falling to a guess.
-  if (filledCount(parsed.filter) > 0 || parsed.rejectedCity) {
+  // some real (structural) constraints, OR a named-but-unserveable city -> it's a search
+  // that needs a valid city. Ask (with the specific reason) instead of falling to a guess.
+  // Only STRUCTURAL fields count here: a bare keyword residue (e.g. an LLM parse hallucinating
+  // "joke" on an out-of-domain message) must NOT masquerade as a search — it falls through to
+  // the embedding OOD gate below and is rejected as unknown.
+  if (structuralCount(parsed.filter) > 0 || parsed.rejectedCity) {
     return { intent: 'search', confidence: 'low', filter: parsed.filter, via: 'rule',
              clarification: parsed.clarification ?? 'Which city are you looking in?' };
   }

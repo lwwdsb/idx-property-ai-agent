@@ -49,6 +49,12 @@ export interface Config {
   /** Warm Python retrieval service (Week 10). */
   retrieval: {
     url: string;
+    /** Multi-query rewrite: expand the semantic query into variants + RRF-fuse the hits.
+     * Opt-in (N variants = N retrieval calls); enable only once eval shows recall improves. */
+    multiQuery: boolean;
+    /** HyDE rewrite for knowledge RAG: retrieve on an LLM hypothetical passage (+blend).
+     * Opt-in (extra LLM call); eval showed +0.10 hit@k but the refusal gate must re-tune up. */
+    hyde: boolean;
   };
   /** Google Maps (commute/proximity filtering). Empty key => proximity filtering
    * silently skipped (乙: search still returns results, just without commute ranking). */
@@ -90,6 +96,8 @@ export const config: Config = {
   },
   retrieval: {
     url: optional('RETRIEVAL_URL', 'http://localhost:8099'),
+    multiQuery: optional('RETRIEVAL_MULTI_QUERY', 'false') === 'true',
+    hyde: optional('RAG_HYDE', 'false') === 'true',
   },
   maps: {
     apiKey: optional('GOOGLE_MAPS_API_KEY'),

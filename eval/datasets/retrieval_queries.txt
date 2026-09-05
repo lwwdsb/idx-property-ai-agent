@@ -1,0 +1,83 @@
+# Retrieval eval query seeds — deliberately STRATIFIED so fusion params are tuned on a
+# mix where dense and bm25 each have home turf (not just semantic-style queries).
+# Lines starting with '#' and blank lines are ignored. Format: <query>  |  <category>
+
+# ── semantic / descriptive style (dense-favorable) ─────────────────────────────
+cozy craftsman bungalow with lots of character | semantic
+modern home with an open floor plan and natural light | semantic
+quiet cul-de-sac family home with a big backyard | semantic
+fixer upper with potential | semantic
+gourmet kitchen with granite countertops and stainless steel appliances | semantic
+spacious home for a large family | semantic
+historic charm with original details | semantic
+smart home with modern upgrades | semantic
+bright and airy with lots of windows | semantic
+open concept living perfect for entertaining | semantic
+private backyard oasis with mature landscaping | semantic
+charming starter home in a family neighborhood | semantic
+luxury estate with high end finishes | semantic
+contemporary minimalist design | semantic
+warm and inviting with a fireplace | semantic
+resort style living | semantic
+move-in ready turnkey condo | semantic
+fully remodeled kitchen and updated bathrooms | semantic
+bright corner unit with a balcony | semantic
+low maintenance yard and single story | semantic
+
+# ── lexical / specific terms (bm25-favorable: exact tokens in remarks) ──────────
+Sub-Zero and Wolf appliances | lexical
+Tesla Powerwall and solar | lexical
+casita with a separate entrance | lexical
+wine cellar | lexical
+tankless water heater | lexical
+Saltillo tile flooring | lexical
+sport court | lexical
+putting green | lexical
+Trex composite deck | lexical
+koi pond | lexical
+crown molding and wainscoting | lexical
+quartz countertops | lexical
+walk in closet | lexical
+three car garage | lexical
+RV parking | lexical
+energy efficient home with solar panels | lexical
+new construction never lived in | lexical
+ADU or guest house or in-law suite | lexical
+horse property with acreage | lexical
+waterfront with a private dock | lexical
+
+# ── mixed: structured + descriptive ────────────────────────────────────────────
+single story ranch with a pool in a gated community | mixed
+downtown loft with exposed brick | mixed
+two story colonial with a formal dining room | mixed
+corner lot with RV access | mixed
+end unit townhome with a two car garage | mixed
+home with a swimming pool and spa | mixed
+gated community with security | mixed
+ocean view and walk to the beach | mixed
+mountain views and privacy | mixed
+gourmet kitchen with a large island | mixed
+
+# ── transaction / concept (token-driven) ───────────────────────────────────────
+price reduced motivated seller | concept
+back on market | concept
+probate sale sold as-is | concept
+short sale opportunity | concept
+assumable loan | concept
+no HOA | concept
+55 plus senior community | concept
+investment property with rental potential | concept
+low property taxes | concept
+seller financing available | concept
+
+# ── lifestyle / location ───────────────────────────────────────────────────────
+walkable neighborhood near shops and restaurants | location
+near top rated schools | location
+close to the beach | location
+golf course community | location
+walk to the park | location
+gated equestrian community | location
+near freeway access for commuters | location
+downtown high rise with city views | location
+quiet street away from traffic | location
+family friendly neighborhood with parks | location

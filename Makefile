@@ -46,6 +46,8 @@ eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant
 	python eval/runners/report_intent_parse.py
 	npx tsx eval/runners/evalE2E.ts
 	python eval/runners/report_e2e.py
+	npx tsx eval/runners/evalModeRetrieval.ts
+	python eval/runners/report_mode_intent.py
 	npx tsx eval/runners/evalAgent.ts
 	python eval/runners/report_agent.py
 	python eval/runners/eval_retrieval.py

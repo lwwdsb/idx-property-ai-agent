@@ -1,6 +1,9 @@
 /**
  * Mode-retrieval predictor (TS side): for each query, extract the search FILTER two ways —
  *   - deterministic: parseQuery (regex, the 0-LLM primary path)
+ * and the INTENT two ways, so the two modes are finally comparable on the same set:
+ *   - deterministic: classifyIntent (rules + embedding classifier + threshold/margin gate)
+ *   - auto:          which tools the LLM chose (no tool call == it judged this out of domain)
  *   - auto:          the real agent path — give the LLM the full tool set, capture the `search`
  *                    tool call's arguments, sanitizeFilter them (+ which tools it chose)
  * Writes predictions; the Python scorer (eval_mode_retrieval.py) runs hybrid_search with each
@@ -11,6 +14,7 @@
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { parseQuery } from '../../src/search/parseQuery.js';
+import { classifyIntent } from '../../src/orchestrator/intent.js';
 import { isKnownCity } from '../../src/search/cityDictionary.js';
 import { getLLMClient, sanitizeFilter } from '../../src/llm/client.js';
 import { buildRegistry } from '../../src/orchestrator/skills.js';
@@ -43,6 +47,14 @@ async function main() {
   for (const c of cases) {
     // deterministic: regex extraction (0-LLM primary)
     const regex = (await parseQuery(c.input, { isKnownCity })).filter;
+    // deterministic intent: the real router path (rules -> embedding classifier -> gate)
+    let regexIntent = 'unknown';
+    try {
+      const cls = await classifyIntent(c.input, { llm, isKnownCity, classify: (m) => pythonBridge.classify(m) });
+      regexIntent = cls.intent;
+    } catch (e) {
+      console.error(`  ! intent classify failed for ${c.id}: ${String(e)}`);
+    }
 
     // auto: real agent extraction — LLM sees the full tool set, we capture its choices
     let autoFilter: Record<string, unknown> = {};
@@ -60,8 +72,9 @@ async function main() {
       console.error(`  ! auto extraction failed for ${c.id}: ${String(e)}`);
     }
 
-    preds.push({ id: c.id, regex_filter: regex, auto_filter: autoFilter, auto_semantic: autoSemantic, auto_tools: toolsCalled });
-    console.log(`  ${c.id} [${c.style}/${c.lang}] regex=${JSON.stringify(regex)} auto=${JSON.stringify(autoFilter)} tools=${toolsCalled.join(',')||'-'}`);
+    preds.push({ id: c.id, regex_filter: regex, regex_intent: regexIntent,
+                 auto_filter: autoFilter, auto_semantic: autoSemantic, auto_tools: toolsCalled });
+    console.log(`  ${c.id} [${c.style}/${c.lang}] intent=${regexIntent} tools=${toolsCalled.join(',')||'-'}`);
   }
 
   mkdirSync(`${HERE}../history`, { recursive: true });

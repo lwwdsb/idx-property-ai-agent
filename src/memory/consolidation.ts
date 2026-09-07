@@ -25,8 +25,9 @@ import { loadProfile, saveProfile, addMemory, forgetMemory, compactMemories, mem
 export const MEMORY_TOOLS: ToolSpec[] = [
   {
     name: 'read_recent_sessions',
-    description: "Read THIS user's recent conversation snippets to find durable preferences/events.",
-    parameters: { type: 'object', properties: { limit: { type: 'number', description: 'how many recent runs (max 10)' } } },
+    description: "Read THIS user's COMPLETED conversations that have not been consolidated yet "
+      + '(oldest first), to find durable preferences/events.',
+    parameters: { type: 'object', properties: { limit: { type: 'number', description: 'how many runs to read (max 10)' } } },
   },
   {
     name: 'list_memories',
@@ -76,12 +77,14 @@ const SYSTEM = [
  * CONTEXT ISOLATION: userId is captured here — it is NOT a tool argument, so the model
  * cannot address a different user. Tools touch only this user's runs (read) + profile (write).
  */
-function makeExecutor(userId: string, runStore: AgentRunStore) {
-  return async function exec(name: string, args: Record<string, unknown>): Promise<string> {
+function makeExecutor(userId: string, runStore: AgentRunStore, since: number) {
+  let maxSeen = since;   // highest run id handed to the model this pass -> the new watermark
+  const exec = async function exec(name: string, args: Record<string, unknown>): Promise<string> {
     if (name === 'read_recent_sessions') {
       const limit = Math.min(10, Math.max(1, Number(args.limit) || 5));
-      const runs = await runStore.recentForUser(userId, limit);
-      if (!runs.length) return 'No recent sessions for this user.';
+      const runs = await runStore.doneSinceForUser(userId, since, limit);
+      if (!runs.length) return 'No new completed sessions since the last consolidation.';
+      for (const r of runs) if (r.id > maxSeen) maxSeen = r.id;
       return runs.map((r) => {
         const turns = r.state.messages
           .filter((m) => m.role === 'user' || m.role === 'assistant')
@@ -113,6 +116,7 @@ function makeExecutor(userId: string, runStore: AgentRunStore) {
     }
     return `error: unknown tool "${name}" — this agent only has memory tools.`;
   };
+  return { exec, seen: () => maxSeen };
 }
 
 export interface ConsolidateDeps { llm: LLMClient; runStore: AgentRunStore; maxSteps?: number; }
@@ -121,7 +125,8 @@ export interface ConsolidateDeps { llm: LLMClient; runStore: AgentRunStore; maxS
 export async function runConsolidation(userId: string, deps: ConsolidateDeps): Promise<string> {
   const { llm, runStore } = deps;
   if (!llm.chatWithTools) throw new Error('consolidation needs an LLM with tool-calling');
-  const exec = makeExecutor(userId, runStore);
+  const since = loadProfile(userId).lastConsolidatedRunId ?? 0;
+  const { exec, seen } = makeExecutor(userId, runStore, since);
   const budget = deps.maxSteps ?? 6;
   const messages: ChatMessage[] = [
     { role: 'system', content: SYSTEM },
@@ -131,7 +136,16 @@ export async function runConsolidation(userId: string, deps: ConsolidateDeps): P
     for (let step = 0; step < budget; step++) {
       const turn = await llm.chatWithTools(messages, MEMORY_TOOLS);   // ONLY the isolated memory tools
       if (!turn.toolCalls.length) {
-        logger.info('memory consolidation done', { userId, steps: step });
+        // Advance the cursor ONLY here. A pass that died mid-way re-reads its runs next time
+        // (at-least-once) — losing a run is permanent, a re-read is not: addMemory merges by
+        // name, so digesting the same conversation twice converges instead of duplicating.
+        const watermark = seen();
+        if (watermark > since) {
+          const profile = loadProfile(userId);
+          profile.lastConsolidatedRunId = watermark;
+          saveProfile(profile);
+        }
+        logger.info('memory consolidation done', { userId, steps: step, watermark });
         return turn.content;
       }
       messages.push(turn.raw);

@@ -18,13 +18,14 @@ async function check(name: string, fn: () => Promise<void> | void) {
 }
 
 interface Step { content?: string; toolCalls?: Array<{ name: string; arguments: Record<string, unknown> }>; }
-function scriptedLLM(steps: Step[], onTools?: (t: ToolSpec[]) => void): LLMClient {
+function scriptedLLM(steps: Step[], onTools?: (t: ToolSpec[]) => void, onMessages?: (m: ChatMessage[]) => void): LLMClient {
   let i = 0;
   return {
     available: true,
     async parseFilters() { return {}; },
     async chatWithTools(_messages: ChatMessage[], tools: ToolSpec[]) {
       onTools?.(tools);
+      onMessages?.(_messages);
       const s = steps[i++] ?? { content: 'done' };
       return {
         content: s.content ?? '',
@@ -48,9 +49,14 @@ const seededStore = async () => {
       { role: 'assistant', content: 'here are some Irvine listings...' },
     ],
   };
-  await store.create(uid, state);
+  const run = await store.create(uid, state);
+  await store.save(run.id, { status: 'done' });   // only COMPLETED runs are eligible
   return store;
 };
+
+/** Last tool observation the model was handed (to assert what it actually got to read). */
+const lastToolText = (msgs: ChatMessage[]) =>
+  [...msgs].reverse().find((m) => m.role === 'tool')?.content as string | undefined;
 
 await check('writes a memory from recent sessions (read -> add -> final)', async () => {
   cleanup();
@@ -158,6 +164,53 @@ await check('compaction still runs when the LLM throws', async () => {
   await assert.rejects(runConsolidation(uid, { llm: boom, runStore: store }), /provider down/);
   const after = loadProfile(uid);
   assert.ok(!after.memories.find((m) => m.name === 'weak'), 'low-score memory should be compacted away');
+  cleanup();
+});
+
+
+await check('digests only completed runs; an awaiting_approval run is not consolidated', async () => {
+  cleanup();
+  const store = new InMemoryAgentRunStore();
+  const mk = (text: string): AgentRunState => ({
+    task: text, progressive: false, step: 1, activeToolNames: [], trace: [],
+    memory: { constraints: {}, facts: [], drafts: [] },
+    messages: [{ role: 'user', content: text }, { role: 'assistant', content: 'ok' }],
+  });
+  const done = await store.create(uid, mk('find 3 bed homes in Irvine'));
+  await store.save(done.id, { status: 'done' });
+  const pending = await store.create(uid, mk('email the agent about 123 Main St'));
+  await store.save(pending.id, { status: 'awaiting_approval' });   // email NOT sent yet
+
+  let seen: string | undefined;
+  const llm = scriptedLLM(
+    [{ toolCalls: [{ name: 'read_recent_sessions', arguments: { limit: 5 } }] }, { content: 'ok' }],
+    undefined, (m) => { seen = lastToolText(m) ?? seen; },
+  );
+  await runConsolidation(uid, { llm, runStore: store });
+
+  assert.ok(seen?.includes('Irvine'), 'the completed run should be readable');
+  assert.ok(!seen?.includes('123 Main St'), 'the awaiting_approval run must not be handed to the model');
+  assert.equal(loadProfile(uid).lastConsolidatedRunId, done.id, 'watermark stops at the completed run');
+  assert.ok(pending.id > done.id, 'the skipped run is newer — it was excluded by status, not by order');
+  cleanup();
+});
+
+await check('watermark makes a second pass see nothing new (no re-reading)', async () => {
+  cleanup();
+  const store = await seededStore();
+  const first = scriptedLLM([{ toolCalls: [{ name: 'read_recent_sessions', arguments: {} }] }, { content: 'ok' }]);
+  await runConsolidation(uid, { llm: first, runStore: store });
+  const mark = loadProfile(uid).lastConsolidatedRunId;
+  assert.ok(mark && mark > 0, 'first pass advances the watermark');
+
+  let seen: string | undefined;
+  const second = scriptedLLM(
+    [{ toolCalls: [{ name: 'read_recent_sessions', arguments: {} }] }, { content: 'ok' }],
+    undefined, (m) => { seen = lastToolText(m) ?? seen; },
+  );
+  await runConsolidation(uid, { llm: second, runStore: store });
+  assert.match(seen ?? '', /No new completed sessions/);
+  assert.equal(loadProfile(uid).lastConsolidatedRunId, mark, 'watermark unchanged when nothing new');
   cleanup();
 });
 

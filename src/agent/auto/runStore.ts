@@ -59,8 +59,14 @@ export interface AgentRunStore {
   byPendingDraft(draftId: number): Promise<AgentRun | null>;
   /** Most recent run for a user (for the `status` progress query). */
   latestForUser(userId: string): Promise<AgentRun | null>;
-  /** Recent runs for a user, newest first (for memory consolidation — bounded context). */
-  recentForUser(userId: string, limit: number): Promise<AgentRun[]>;
+  /**
+   * COMPLETED runs for a user after a watermark id, OLDEST FIRST (memory consolidation).
+   * `sinceRunId` is the consumer cursor: only runs the consolidator has not digested yet.
+   * Only terminal-and-successful runs qualify — an awaiting_approval run is a half-finished
+   * conversation (the email is not sent yet), and digesting it would mint memories for
+   * things that never happened.
+   */
+  doneSinceForUser(userId: string, sinceRunId: number, limit: number): Promise<AgentRun[]>;
 }
 
 // ---- MySQL-backed (persistent) ----
@@ -121,10 +127,11 @@ export class MySqlAgentRunStore implements AgentRunStore {
     return rows[0] ? toRun(rows[0]) : null;
   }
 
-  async recentForUser(userId: string, limit: number): Promise<AgentRun[]> {
+  async doneSinceForUser(userId: string, sinceRunId: number, limit: number): Promise<AgentRun[]> {
     await this.ensure();
     const [rows] = await getPool().query<RowDataPacket[]>(
-      'SELECT * FROM agent_runs WHERE user_id=? ORDER BY id DESC LIMIT ?', [userId, Math.max(1, Math.min(50, limit))]);
+      "SELECT * FROM agent_runs WHERE user_id=? AND id>? AND status='done' ORDER BY id ASC LIMIT ?",
+      [userId, sinceRunId, Math.max(1, Math.min(50, limit))]);
     return rows.map(toRun);
   }
 }
@@ -166,7 +173,10 @@ export class InMemoryAgentRunStore implements AgentRunStore {
   async latestForUser(userId: string) {
     return [...this.map.values()].filter((r) => r.userId === userId).sort((a, b) => b.id - a.id)[0] ?? null;
   }
-  async recentForUser(userId: string, limit: number) {
-    return [...this.map.values()].filter((r) => r.userId === userId).sort((a, b) => b.id - a.id).slice(0, Math.max(1, limit));
+  async doneSinceForUser(userId: string, sinceRunId: number, limit: number) {
+    return [...this.map.values()]
+      .filter((r) => r.userId === userId && r.id > sinceRunId && r.status === 'done')
+      .sort((a, b) => a.id - b.id)
+      .slice(0, Math.max(1, limit));
   }
 }

@@ -42,6 +42,15 @@ export interface UserProfile {
   updated: string;
   prefs: Partial<Record<PrefKey, PrefEntry>>;   // facts
   memories: MemoryEntry[];                       // semantic + episodic
+  /**
+   * Consumer cursor into this user's agent_runs: the highest run id already digested by
+   * the consolidation sub-agent. Reading "the last N runs" is a sliding window — it re-reads
+   * what it just read, and silently drops runs that scroll past the limit between passes.
+   * A watermark turns that into "everything after the last pass": no re-reads, no gaps.
+   * Advanced only on a clean finish, so a crashed pass re-reads rather than skips
+   * (at-least-once; addMemory merges by name, so a repeat is harmless).
+   */
+  lastConsolidatedRunId?: number;
 }
 
 const DIR = 'data/profiles';
@@ -51,7 +60,7 @@ const jsonPath = (userId: string) => join(DIR, `${sanitize(userId)}.json`);
 const mdPath = (userId: string) => join(DIR, `${sanitize(userId)}.md`);
 
 export function freshProfile(userId: string): UserProfile {
-  return { userId, updated: today(), prefs: {}, memories: [] };
+  return { userId, updated: today(), prefs: {}, memories: [], lastConsolidatedRunId: 0 };
 }
 
 export function loadProfile(userId: string): UserProfile {
@@ -59,7 +68,8 @@ export function loadProfile(userId: string): UserProfile {
   if (!existsSync(p)) return freshProfile(userId);
   try {
     const raw = JSON.parse(readFileSync(p, 'utf8')) as UserProfile;
-    raw.memories ??= [];   // tolerate older files
+    raw.memories ??= [];                 // tolerate older files
+    raw.lastConsolidatedRunId ??= 0;     // pre-watermark profiles start from the beginning
     return raw;
   } catch { return freshProfile(userId); }
 }

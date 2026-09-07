@@ -127,22 +127,31 @@ export async function runConsolidation(userId: string, deps: ConsolidateDeps): P
     { role: 'system', content: SYSTEM },
     { role: 'user', content: `Consolidate durable long-term memory for this user from their recent sessions.` },
   ];
-  for (let step = 0; step < budget; step++) {
-    const turn = await llm.chatWithTools(messages, MEMORY_TOOLS);   // ONLY the isolated memory tools
-    if (!turn.toolCalls.length) {
-      // capacity trigger: code-level backstop bounds size after the LLM's promotion/merge/forget
-      const profile = loadProfile(userId);
-      const { removed } = compactMemories(profile);
-      if (removed.length) saveProfile(profile);
-      logger.info('memory consolidation done', { userId, steps: step, compacted: removed.length });
-      return turn.content;
+  try {
+    for (let step = 0; step < budget; step++) {
+      const turn = await llm.chatWithTools(messages, MEMORY_TOOLS);   // ONLY the isolated memory tools
+      if (!turn.toolCalls.length) {
+        logger.info('memory consolidation done', { userId, steps: step });
+        return turn.content;
+      }
+      messages.push(turn.raw);
+      for (const call of turn.toolCalls) {
+        const observation = await exec(call.name, call.arguments);
+        messages.push({ role: 'tool', tool_call_id: call.id, content: observation });
+      }
     }
-    messages.push(turn.raw);
-    for (const call of turn.toolCalls) {
-      const observation = await exec(call.name, call.arguments);
-      messages.push({ role: 'tool', tool_call_id: call.id, content: observation });
+    logger.warn('memory consolidation hit step budget', { userId, budget });
+    return 'consolidation reached step budget';
+  } finally {
+    // Code-level backstop, in a finally ON PURPOSE: it must also run when the LLM ran out of
+    // step budget or threw. Those are exactly the paths where the model added memories but never
+    // got to merge/forget them — i.e. when memory is at its most bloated and the bound matters
+    // most. Deterministic (0-LLM) and idempotent, so running it on every exit path is safe.
+    const profile = loadProfile(userId);
+    const { removed } = compactMemories(profile);
+    if (removed.length) {
+      saveProfile(profile);
+      logger.info('memory compacted', { userId, compacted: removed.length, removed });
     }
   }
-  logger.warn('memory consolidation hit step budget', { userId, budget });
-  return 'consolidation reached step budget';
 }

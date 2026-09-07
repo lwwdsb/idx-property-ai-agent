@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { runConsolidation, MEMORY_TOOLS } from './consolidation.js';
-import { loadProfile } from './profile.js';
+import { loadProfile, addMemory, saveProfile } from './profile.js';
 import { InMemoryAgentRunStore, type AgentRunState } from '../agent/auto/runStore.js';
 import type { LLMClient, ChatMessage, ToolSpec } from '../llm/client.js';
 
@@ -116,6 +116,48 @@ await check('ISOLATION: an unknown/business tool call is rejected, not executed'
   ]);
   await runConsolidation(uid, { llm, runStore: store });   // must not throw / not send anything
   assert.equal(loadProfile(uid).memories.length, 0);        // nothing written by a bogus tool
+  cleanup();
+});
+
+
+// The backstop lives in a `finally` precisely so it survives the paths where the LLM never
+// reached its merge/forget phase. Both tests seed a memory that decay MUST evict.
+const seedWeakAndStrong = () => {
+  const p = loadProfile(uid);
+  addMemory(p, { name: 'weak', description: 'd', type: 'semantic', content: 'c', salience: 0.01 });
+  addMemory(p, { name: 'keep', description: 'd', type: 'semantic', content: 'c', salience: 0.9 });
+  saveProfile(p);
+};
+
+await check('compaction still runs when the LLM burns its step budget', async () => {
+  cleanup();
+  const store = await seededStore();
+  seedWeakAndStrong();
+  const llm = scriptedLLM([   // never yields a final turn -> exhausts the budget
+    { toolCalls: [{ name: 'list_memories', arguments: {} }] },
+    { toolCalls: [{ name: 'list_memories', arguments: {} }] },
+    { toolCalls: [{ name: 'list_memories', arguments: {} }] },
+  ]);
+  const out = await runConsolidation(uid, { llm, runStore: store, maxSteps: 2 });
+  assert.match(out, /step budget/);
+  const after = loadProfile(uid);
+  assert.ok(!after.memories.find((m) => m.name === 'weak'), 'low-score memory should be compacted away');
+  assert.ok(after.memories.find((m) => m.name === 'keep'), 'high-score memory must survive');
+  cleanup();
+});
+
+await check('compaction still runs when the LLM throws', async () => {
+  cleanup();
+  const store = await seededStore();
+  seedWeakAndStrong();
+  const boom: LLMClient = {
+    available: true,
+    async parseFilters() { return {}; },
+    async chatWithTools() { throw new Error('provider down'); },
+  };
+  await assert.rejects(runConsolidation(uid, { llm: boom, runStore: store }), /provider down/);
+  const after = loadProfile(uid);
+  assert.ok(!after.memories.find((m) => m.name === 'weak'), 'low-score memory should be compacted away');
   cleanup();
 });
 

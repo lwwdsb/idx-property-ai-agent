@@ -5,8 +5,8 @@
  *   - semantic: generalized preferences ("likes bright old homes"). name/desc + metadata.
  *   - episodic: specific events. name/desc + metadata; SELECTIVELY loaded by description.
  *
- * Semantic/episodic entries carry compaction signals: recency (createdAt/lastUsed),
- * frequency (useCount), importance (salience/confidence) + provenance (sourceRuns/mergedFrom).
+ * Semantic/episodic entries carry three compaction signals: recency (lastUsed / updatedAt),
+ * frequency (useCount), importance (salience) + provenance (sourceRuns/mergedFrom).
  * Consolidation/compaction itself is the periodic sub-agent's job; this file stores the
  * data + the cheap immediate level (facts) + load/select helpers.
  *
@@ -46,7 +46,6 @@ export interface MemoryEntry {
   lastUsed: string;
   useCount: number;
   salience: number;      // importance 0-1
-  confidence: number;
   sourceRuns: number[];  // provenance (which runs) — also basis for consolidation
   mergedFrom: string[];  // compaction lineage (names merged/superseded into this)
 }
@@ -104,7 +103,10 @@ export function loadProfile(userId: string): UserProfile {
   const usage = readJson<Record<string, UsageEntry>>(usagePath(userId)) ?? {};
 
   const prefs = facts?.prefs ?? legacy?.prefs ?? {};
-  const memories = (mem?.memories ?? legacy?.memories ?? []).map((m) => {
+  const memories = (mem?.memories ?? legacy?.memories ?? []).map((raw) => {
+    // `confidence` was defined but never consumed by compScore, and the add_memory tool never
+    // even exposed it — dropped. Strip it off existing files instead of carrying it forever.
+    const { confidence: _dead, ...m } = raw as MemoryEntry & { confidence?: number };
     const u = usage[m.name];
     return {
       ...m,
@@ -181,7 +183,7 @@ export function preferredFilter(profile: UserProfile, threshold = 0.5): Partial<
 // ── Semantic/episodic entries (name/desc + metadata) ───────────────────────────
 export interface NewMemory {
   name: string; description: string; type: MemoryType; content: string;
-  salience?: number; confidence?: number; sourceRuns?: number[]; mergedFrom?: string[];
+  salience?: number; sourceRuns?: number[]; mergedFrom?: string[];
 }
 /** Add or merge a classified memory (used by the periodic consolidation sub-agent). */
 export function addMemory(profile: UserProfile, m: NewMemory): UserProfile {
@@ -189,14 +191,13 @@ export function addMemory(profile: UserProfile, m: NewMemory): UserProfile {
   const e = profile.memories.find((x) => x.name === m.name);
   if (e) {
     // same name = UPDATE of the same memory. If the content changed (e.g. an opposite
-    // preference), the new value REPLACES the old (recency wins) — salience/confidence
-    // follow the new content, NOT max (max would leave a stale high score on new content).
+    // preference), the new value REPLACES the old (recency wins) — salience follows the new
+    // content, NOT max (max would leave a stale high score on new content).
     // Reinforcement of "same content over time" comes from useCount/recency in compScore.
     const contentChanged = !!m.content && m.content !== e.content;
     e.description = m.description || e.description;
     e.content = m.content || e.content;
     if (m.salience !== undefined) e.salience = contentChanged ? m.salience : Math.max(e.salience, m.salience);
-    if (m.confidence !== undefined) e.confidence = contentChanged ? m.confidence : Math.max(e.confidence, m.confidence);
     e.sourceRuns = [...new Set([...e.sourceRuns, ...(m.sourceRuns ?? [])])];
     e.mergedFrom = [...new Set([...e.mergedFrom, ...(m.mergedFrom ?? [])])];
     e.updatedAt = day;   // NOT lastUsed: that one belongs to the chat path's usage file
@@ -204,7 +205,7 @@ export function addMemory(profile: UserProfile, m: NewMemory): UserProfile {
     profile.memories.push({
       name: m.name, description: m.description, type: m.type, content: m.content,
       createdAt: day, updatedAt: day, lastUsed: day, useCount: 0,
-      salience: m.salience ?? 0.5, confidence: m.confidence ?? 0.5,
+      salience: m.salience ?? 0.5,
       sourceRuns: m.sourceRuns ?? [], mergedFrom: m.mergedFrom ?? [],
     });
   }

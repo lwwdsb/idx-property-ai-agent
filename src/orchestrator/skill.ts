@@ -15,6 +15,10 @@ export interface SkillContext {
   message: string;
   /** Params extracted by the router (reused from parseQuery). */
   filter: SearchFilter;
+  /** High-confidence long-term preferences. The LAST resort when filling a blank field —
+   * skills that re-parse the message (search, via handleSearchTurn) must apply these
+   * themselves, AFTER the turn parse and the carried-over slot have had their say. */
+  filterDefaults?: Partial<SearchFilter>;
   /** The configured LLM (so skills' own parsing uses the same fallback). */
   llm?: LLMClient;
   /** In a multi-skill plan, the outputs of skills already run (the parallel batch +

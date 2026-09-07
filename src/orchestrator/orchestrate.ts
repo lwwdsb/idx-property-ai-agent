@@ -64,18 +64,27 @@ export async function orchestrate(
   // Long-term memory: learn from what the USER actually gave, then fill the fields they
   // DIDN'T give with their high-confidence preferences (SOFT defaults — the current
   // message already took priority since these only touch still-empty fields).
+  // NOTE: this fills cls.filter, which serves the skills that consume it directly
+  // (market/recommend/knowledge). `search` re-parses the message in handleSearchTurn and
+  // ignores cls.filter, so it applies the same defaults itself — see conversation.ts.
   opts.onFilter?.({ ...cls.filter });
-  if (opts.filterDefaults) {
+  // Not when the user named a city we don't serve: that slot is an explicit choice, not a
+  // blank, and quietly swapping in their usual city would answer a question they didn't ask.
+  if (opts.filterDefaults && !cls.rejectedCity) {
     const f = cls.filter as Record<string, unknown>;
     for (const [k, v] of Object.entries(opts.filterDefaults)) if (f[k] == null) f[k] = v;
   }
 
-  // low-confidence / unknown -> clarify instead of guessing (Q6)
-  if (cls.confidence === 'low' && cls.clarification) {
+  // low-confidence / unknown -> clarify instead of guessing (Q6).
+  // A preference-seeded city rescues a turn that ONLY lacked a city — but never an `unknown`
+  // one: out-of-domain rejection is a safety property and must not be defeated by a stored
+  // preference ("tell me a joke" stays unknown no matter what city we have on file).
+  const seededPastClarify = cls.intent !== 'unknown' && !!cls.filter.city;
+  if (cls.confidence === 'low' && cls.clarification && !seededPastClarify) {
     return { intent: cls.intent, reply: cls.clarification };
   }
 
-  const ctx = { userId, message, filter: cls.filter, llm };
+  const ctx = { userId, message, filter: cls.filter, llm, filterDefaults: opts.filterDefaults };
 
   // compound recipe: search, then validate the top result's price (fixed chain)
   if (cls.intent === 'compound') {

@@ -170,6 +170,17 @@ t('regex-miss phrasing -> routed via embedding classifier', async () => {
   assert.ok(calls.some((c) => c.startsWith('classify:')), 'embedding classifier consulted');
   classifyReturn = { skill: 'unknown', score: 0.2, margin: 0.1 };  // reset
 });
+t('a stored city preference must NOT defeat OOD rejection', async () => {
+  classifyReturn = { skill: 'market', score: 0.9, margin: 0.01 };   // ambiguous -> unknown
+  const r = await orchestrate('u-pref-ood', 'qqq zzz vvv', { ...opts, filterDefaults: { city: 'Irvine' } });
+  assert.equal(r.intent, 'unknown', 'out-of-domain rejection is a safety property, not a blank to fill');
+  classifyReturn = { skill: 'unknown', score: 0.2, margin: 0.1 };
+});
+t('a stored city preference DOES rescue a turn that only lacked a city', async () => {
+  const r = await orchestrate('u-pref-rescue', 'a 3 bedroom home', { ...opts, filterDefaults: { city: 'Irvine' } });
+  assert.notEqual(r.intent, 'unknown');
+  assert.doesNotMatch(r.reply, /Which city/i, 'we know where they usually look — search there and say so');
+});
 t('low embedding score -> still clarify (floor)', async () => {
   classifyReturn = { skill: 'market', score: 0.3, margin: 0.2 };   // below threshold
   const r = await orchestrate('u', 'zzz qqq', opts);

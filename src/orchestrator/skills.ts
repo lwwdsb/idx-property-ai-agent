@@ -172,6 +172,9 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
         // filter the LLM (+ memory) already extracted, so it isn't re-parsed / no regex fallback.
         const turn = await handleSearchTurn(ctx.userId, ctx.message, {
           llm: ctx.llm, filter: ctx.args ? ctx.filter : undefined,
+          // Deterministic mode re-parses, so cls.filter (already seeded upstream) is dropped —
+          // the preferences have to be handed over separately or they never reach search.
+          filterDefaults: ctx.args ? undefined : ctx.filterDefaults,
         });
         // proximity: CODE decides to call maps because the slot exists (not the LLM).
         if (ctx.filter.proximity && turn.rows?.length) {

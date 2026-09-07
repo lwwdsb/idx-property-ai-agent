@@ -18,6 +18,9 @@ export interface Classification {
   confidence: 'high' | 'low';
   filter: SearchFilter;
   clarification?: string;
+  /** A city was named but we don't serve it. Surfaced so callers know the city slot is an
+   * explicit (rejected) choice rather than a blank — a stored preference must not fill it. */
+  rejectedCity?: string;
   /** How the intent was decided (for logging/debugging). */
   via?: 'rule' | 'embedding';
 }
@@ -93,6 +96,7 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   // the embedding OOD gate below and is rejected as unknown.
   if (structuralCount(parsed.filter) > 0 || parsed.rejectedCity) {
     return { intent: 'search', confidence: 'low', filter: parsed.filter, via: 'rule',
+             rejectedCity: parsed.rejectedCity,
              clarification: parsed.clarification ?? 'Which city are you looking in?' };
   }
 

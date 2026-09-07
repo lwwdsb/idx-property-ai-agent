@@ -28,6 +28,34 @@ t('in-memory store honors TTL (expired entries return null)', async () => {
   assert.equal((await live.get('u'))?.filter.city, 'Irvine');
 });
 
+// ── long-term preferences as the LAST resort in the fill chain ──
+// chain: this turn's parse > slot carried across turns > filterDefaults > ask
+const PREFS = { city: 'Irvine' };
+
+t('prefs fill a blank city, and the assumption is stated out loud', async () => {
+  const store = new InMemorySessionStore();
+  const r = await handleSearchTurn('u', '3 bedroom home', { store, filterDefaults: PREFS });
+  assert.notEqual(r.kind, 'clarify', 'a known preference means we no longer have to ask');
+  assert.equal(r.filter.city, 'Irvine');
+  assert.match(r.reply, /Assumed .*Irvine.*usual searches/, 'a default must never be silent');
+});
+
+t('prefs never override a city the user actually said (slot wins)', async () => {
+  const store = new InMemorySessionStore();
+  await handleSearchTurn('u', '3 bed in Los Angeles', { store, filterDefaults: PREFS });
+  const r = await handleSearchTurn('u', 'under 2 million', { store, filterDefaults: PREFS });
+  assert.equal(r.filter.city, 'Los Angeles', 'the carried-over slot outranks a stored preference');
+  assert.doesNotMatch(r.reply, /Assumed/, 'nothing was assumed, so nothing should be announced');
+});
+
+t('prefs do not paper over a city we do not serve', async () => {
+  const store = new InMemorySessionStore();
+  const r = await handleSearchTurn('u', '3 bed in Atlantis', { store, filterDefaults: PREFS });
+  assert.equal(r.kind, 'clarify', 'a rejected city is an explicit choice, not a blank to fill');
+  assert.match(r.reply, /Atlantis/);
+  assert.notEqual(r.filter.city, 'Irvine');
+});
+
 t('missing city -> clarify, keeps constraints (no DB hit)', async () => {
   const store = new InMemorySessionStore();
   const r = await handleSearchTurn('u', '3 bedroom under 1M', { store });

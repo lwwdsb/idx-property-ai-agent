@@ -62,17 +62,41 @@ await check('memory: selectMemories fallback ranks by salience (no LLM)', async 
   const p = freshProfile('u');
   addMemory(p, { name: 'hi', description: 'important', type: 'episodic', content: 'A', salience: 0.9 });
   addMemory(p, { name: 'lo', description: 'minor', type: 'episodic', content: 'B', salience: 0.2 });
-  const sel = await selectMemories(episodicMemories(p), 'anything', undefined, 1);
+  const sel = await selectMemories(episodicMemories(p), 'anything', undefined, { episodic: 1 });
   assert.equal(sel.length, 1); assert.equal(sel[0]!.name, 'hi');
 });
-await check('profileHint: includes facts + semantic content, not episodic by default', () => {
+await check('memory: semantic is selected too (so useCount is a real signal)', async () => {
+  const p = freshProfile('u');
+  addMemory(p, { name: 'sem', description: 'prefers old homes', type: 'semantic', content: 'S', salience: 0.8 });
+  addMemory(p, { name: 'ev', description: 'drafted a report', type: 'episodic', content: 'E', salience: 0.8 });
+  const sel = await selectMemories(p.memories, 'anything', undefined);
+  assert.deepEqual(sel.map((m) => m.name).sort(), ['ev', 'sem'], 'both types are eligible');
+  sel.forEach((m) => touchMemory(p, m.name));
+  // Wholesale injection made this impossible: everything rose together, so order never moved.
+  assert.equal(p.memories.find((m) => m.name === 'sem')!.useCount, 1);
+});
+await check('memory: caps apply PER TYPE — episodics cannot crowd out preferences', async () => {
+  const p = freshProfile('u');
+  for (let i = 0; i < 8; i++) {
+    addMemory(p, { name: `ev${i}`, description: 'event', type: 'episodic', content: 'E', salience: 0.9 });
+  }
+  addMemory(p, { name: 'sem', description: 'pref', type: 'semantic', content: 'S', salience: 0.1 });
+  const sel = await selectMemories(p.memories, 'anything', undefined, { semantic: 5, episodic: 3 });
+  assert.equal(sel.filter((m) => m.type === 'episodic').length, 3);
+  assert.ok(sel.some((m) => m.name === 'sem'), 'a low-salience preference still gets its own slot');
+});
+await check('profileHint: facts always; memories ONLY if they were selected', () => {
   let p = freshProfile('u');
   for (let i = 0; i < 3; i++) p = learnFromFilter(p, f({ city: 'Irvine' }));
   addMemory(p, { name: 'schools', description: 'schools', type: 'semantic', content: 'likes good schools' });
   addMemory(p, { name: 'ev', description: 'event', type: 'episodic', content: 'drafted a report' });
-  const hint = profileHint(p);
-  assert.ok(hint.includes('Irvine') && hint.includes('likes good schools'));
-  assert.ok(!hint.includes('drafted a report'));   // episodic only when explicitly passed
+  // Nothing selected -> no memories injected, semantic included. Injecting what was never
+  // selected is exactly what made useCount meaningless.
+  const bare = profileHint(p);
+  assert.ok(bare.includes('Irvine'), 'facts are still always injected');
+  assert.ok(!bare.includes('likes good schools') && !bare.includes('drafted a report'));
+  const withSel = profileHint(p, semanticMemories(p));
+  assert.ok(withSel.includes('likes good schools'));
 });
 
 // ── store round-trip ──

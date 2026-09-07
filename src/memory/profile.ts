@@ -240,20 +240,48 @@ function jsonArray(text: string): number[] {
   catch { return []; }
 }
 
-/** Selectively load episodic memories relevant to the current task. LLM reads the
- * name/description index and picks; falls back to salience×recency top-k without an LLM. */
-export async function selectMemories(episodic: MemoryEntry[], context: string, llm?: LLMClient, k = 3): Promise<MemoryEntry[]> {
-  if (!episodic.length) return [];
-  const byRank = () => [...episodic].sort((a, b) => rank(b) - rank(a)).slice(0, k);
+export interface SelectLimits { semantic?: number; episodic?: number; }
+/**
+ * Selectively load the memories relevant to the current task — BOTH types.
+ *
+ * Semantic used to be injected wholesale. That quietly broke its own scoring: every entry got
+ * "used" on every turn, so useCount carried no signal (all of them rise together, relative
+ * order never moves) and eviction fell back to salience + age alone. Selecting both types
+ * gives semantic a real usage signal, and bounds the prompt as the set grows.
+ *
+ * The LLM reads one name/description index for both types and returns the relevant indices;
+ * caps are applied PER TYPE afterwards, so a pile of episodics can't crowd out preferences.
+ * Without an LLM it degrades to salience×recency, capped the same way.
+ */
+export async function selectMemories(
+  memories: MemoryEntry[],
+  context: string,
+  llm?: LLMClient,
+  limits: SelectLimits = {},
+): Promise<MemoryEntry[]> {
+  const maxSem = limits.semantic ?? 5;   // generalized prefs: few, usually relevant
+  const maxEp = limits.episodic ?? 3;    // events: many, mostly irrelevant
+  if (!memories.length) return [];
+  const capPerType = (list: MemoryEntry[]) => {
+    const out: MemoryEntry[] = [];
+    let sem = 0, ep = 0;
+    for (const m of list) {
+      if (m.type === 'semantic') { if (sem < maxSem) { out.push(m); sem += 1; } }
+      else if (ep < maxEp) { out.push(m); ep += 1; }
+    }
+    return out;
+  };
+  const byRank = () => capPerType([...memories].sort((a, b) => rank(b) - rank(a)));
   if (!llm?.chatWithTools) return byRank();
-  const index = episodic.map((e, i) => `${i}: [${e.name}] ${e.description}`).join('\n');
+  const index = memories.map((m, i) => `${i}: [${m.type}] [${m.name}] ${m.description}`).join('\n');
   const turn = await llm.chatWithTools([
-    { role: 'system', content: 'You pick which past episodic memories are RELEVANT to the current task. '
-      + 'Given a numbered list ("i: [name] description") and the task, return a JSON array of the relevant indices (e.g. [0,2]); [] if none.' } as ChatMessage,
+    { role: 'system', content: 'You pick which stored memories about this user are RELEVANT to the current task. '
+      + 'Each line is "i: [semantic|episodic] [name] description" — semantic = a generalized preference, '
+      + 'episodic = a past event. Return a JSON array of the relevant indices (e.g. [0,2]); [] if none.' } as ChatMessage,
     { role: 'user', content: `Memories:\n${index}\n\nCurrent task: ${context}` } as ChatMessage,
   ], []);
-  const picked = jsonArray(turn.content).filter((i) => episodic[i]).map((i) => episodic[i]!);
-  return (picked.length ? picked : byRank()).slice(0, k);
+  const picked = jsonArray(turn.content).filter((i) => memories[i]).map((i) => memories[i]!);
+  return picked.length ? capPerType(picked) : byRank();
 }
 
 /** Delete a memory by name (used for consolidation: superseded/contradicted/redundant). */
@@ -295,13 +323,16 @@ export function compactMemories(profile: UserProfile, opts: CompactOptions = {})
 }
 
 // ── Injection helpers ──────────────────────────────────────────────────────────
-/** Soft context for the auto agent's system prompt: facts + all semantic + given episodic. */
-export function profileHint(profile: UserProfile, episodic: MemoryEntry[] = []): string {
+/**
+ * Soft context for the auto agent's system prompt: facts + the memories selectMemories picked.
+ * Nothing is pulled in wholesale here — whatever is injected must have been SELECTED, so it is
+ * also something we can honestly mark as used (see selectMemories).
+ */
+export function profileHint(profile: UserProfile, selected: MemoryEntry[] = []): string {
   const parts: string[] = [];
   const pf = preferredFilter(profile);
   if (Object.keys(pf).length) parts.push(`likely preferences ${JSON.stringify(pf)}`);
-  const mems = [...semanticMemories(profile), ...episodic];
-  if (mems.length) parts.push(`what we know: ${mems.map((m) => m.content).join('; ')}`);
+  if (selected.length) parts.push(`what we know: ${selected.map((m) => m.content).join('; ')}`);
   if (!parts.length) return '';
   return `USER PROFILE (soft context — the current request always overrides): ${parts.join('; ')}.`;
 }

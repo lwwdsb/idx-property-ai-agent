@@ -10,10 +10,20 @@
  * Consolidation/compaction itself is the periodic sub-agent's job; this file stores the
  * data + the cheap immediate level (facts) + load/select helpers.
  *
- * Stored as JSON (authoritative) + a rendered .md (human-visualizable) under data/profiles/.
+ * STORAGE — split by WRITER, so the chat agent and the consolidation sub-agent never write the
+ * same file and cannot clobber each other (no locking needed; the conflict is gone by design):
+ *   <uid>.facts.json     prefs                       <- written by the chat path only
+ *   <uid>.memories.json  memories + watermark        <- written by the consolidation agent only
+ *   <uid>.usage.json     per-memory useCount/lastUsed <- written by the chat path only
+ *   <uid>.md             rendered mirror, derived, best-effort (never read back)
+ *   <uid>.json           LEGACY single file — still read (and migrated) if present
+ * Reading the other writer's file is fine: memories are soft context, a slightly stale read
+ * changes nothing. Every write is atomic (tmp file + rename), because a torn JSON file would
+ * hit loadProfile's catch and silently reset the whole profile.
+ *
  * Preferences are SOFT DEFAULTS: only fill fields the user didn't give.
  */
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SearchFilter } from '../search/filters.js';
 import type { LLMClient, ChatMessage } from '../llm/client.js';
@@ -30,6 +40,9 @@ export interface MemoryEntry {
   type: MemoryType;
   content: string;
   createdAt: string;
+  /** Content last rewritten by the consolidation agent (its file). Distinct from lastUsed,
+   *  which is a read-side counter owned by the chat path — different writers, different files. */
+  updatedAt: string;
   lastUsed: string;
   useCount: number;
   salience: number;      // importance 0-1
@@ -56,28 +69,86 @@ export interface UserProfile {
 const DIR = 'data/profiles';
 const today = () => new Date().toISOString().slice(0, 10);
 const sanitize = (userId: string) => userId.replace(/[^a-zA-Z0-9_-]/g, '_');
-const jsonPath = (userId: string) => join(DIR, `${sanitize(userId)}.json`);
+const legacyPath = (userId: string) => join(DIR, `${sanitize(userId)}.json`);
+const factsPath = (userId: string) => join(DIR, `${sanitize(userId)}.facts.json`);
+const memoriesPath = (userId: string) => join(DIR, `${sanitize(userId)}.memories.json`);
+const usagePath = (userId: string) => join(DIR, `${sanitize(userId)}.usage.json`);
 const mdPath = (userId: string) => join(DIR, `${sanitize(userId)}.md`);
+
+interface UsageEntry { useCount: number; lastUsed: string; }
+
+/** Write via tmp+rename: readers see either the whole old file or the whole new one. */
+function writeAtomic(path: string, text: string): void {
+  mkdirSync(DIR, { recursive: true });
+  const tmp = `${path}.tmp`;
+  writeFileSync(tmp, text);
+  renameSync(tmp, path);
+}
+function readJson<T>(path: string): T | null {
+  if (!existsSync(path)) return null;
+  try { return JSON.parse(readFileSync(path, 'utf8')) as T; } catch { return null; }
+}
 
 export function freshProfile(userId: string): UserProfile {
   return { userId, updated: today(), prefs: {}, memories: [], lastConsolidatedRunId: 0 };
 }
 
+/**
+ * Merge the per-writer files back into one view. Usage counters live in their own file, so a
+ * memory's useCount/lastUsed are filled in here rather than stored alongside its content.
+ */
 export function loadProfile(userId: string): UserProfile {
-  const p = jsonPath(userId);
-  if (!existsSync(p)) return freshProfile(userId);
-  try {
-    const raw = JSON.parse(readFileSync(p, 'utf8')) as UserProfile;
-    raw.memories ??= [];                 // tolerate older files
-    raw.lastConsolidatedRunId ??= 0;     // pre-watermark profiles start from the beginning
-    return raw;
-  } catch { return freshProfile(userId); }
+  const legacy = readJson<UserProfile>(legacyPath(userId));   // pre-split file, if any
+  const facts = readJson<{ prefs?: UserProfile['prefs']; updated?: string }>(factsPath(userId));
+  const mem = readJson<{ memories?: MemoryEntry[]; lastConsolidatedRunId?: number; updated?: string }>(memoriesPath(userId));
+  const usage = readJson<Record<string, UsageEntry>>(usagePath(userId)) ?? {};
+
+  const prefs = facts?.prefs ?? legacy?.prefs ?? {};
+  const memories = (mem?.memories ?? legacy?.memories ?? []).map((m) => {
+    const u = usage[m.name];
+    return {
+      ...m,
+      updatedAt: m.updatedAt ?? m.createdAt,
+      useCount: u?.useCount ?? m.useCount ?? 0,
+      lastUsed: u?.lastUsed ?? m.lastUsed ?? m.createdAt,
+    };
+  });
+  const updated = [facts?.updated, mem?.updated, legacy?.updated].filter(Boolean).sort().pop() ?? today();
+  return {
+    userId, updated, prefs, memories,
+    lastConsolidatedRunId: mem?.lastConsolidatedRunId ?? legacy?.lastConsolidatedRunId ?? 0,
+  };
 }
 
-export function saveProfile(profile: UserProfile): void {
-  mkdirSync(DIR, { recursive: true });
-  writeFileSync(jsonPath(profile.userId), JSON.stringify(profile, null, 2));
-  writeFileSync(mdPath(profile.userId), renderMd(profile));
+/**
+ * The three writes below are deliberately SEPARATE. Each is owned by exactly one writer, so
+ * "load -> modify -> save" from the chat path and from the consolidation agent touch different
+ * files and cannot overwrite each other. Call the one matching what you changed:
+ *   learnFromFilter        -> saveFacts
+ *   touchMemory            -> saveUsage
+ *   addMemory/forgetMemory/compactMemories/watermark -> saveMemories
+ */
+export function saveFacts(profile: UserProfile): void {
+  writeAtomic(factsPath(profile.userId), JSON.stringify({ prefs: profile.prefs, updated: profile.updated }, null, 2));
+  refreshMd(profile);
+}
+export function saveMemories(profile: UserProfile): void {
+  // Usage counters are the other writer's file — strip them so we never write them back here.
+  const memories = profile.memories.map(({ useCount: _u, lastUsed: _l, ...rest }) => rest);
+  writeAtomic(memoriesPath(profile.userId), JSON.stringify({
+    memories, lastConsolidatedRunId: profile.lastConsolidatedRunId ?? 0, updated: profile.updated,
+  }, null, 2));
+  refreshMd(profile);
+}
+export function saveUsage(profile: UserProfile): void {
+  const usage: Record<string, UsageEntry> = {};
+  for (const m of profile.memories) usage[m.name] = { useCount: m.useCount, lastUsed: m.lastUsed };
+  writeAtomic(usagePath(profile.userId), JSON.stringify(usage, null, 2));
+  refreshMd(profile);
+}
+/** Derived, human-only mirror. Never read back, so a failure here must not break a save. */
+function refreshMd(profile: UserProfile): void {
+  try { writeAtomic(mdPath(profile.userId), renderMd(profile)); } catch { /* mirror only */ }
 }
 
 // ── Facts (structured, 0 LLM) ──────────────────────────────────────────────────
@@ -128,11 +199,11 @@ export function addMemory(profile: UserProfile, m: NewMemory): UserProfile {
     if (m.confidence !== undefined) e.confidence = contentChanged ? m.confidence : Math.max(e.confidence, m.confidence);
     e.sourceRuns = [...new Set([...e.sourceRuns, ...(m.sourceRuns ?? [])])];
     e.mergedFrom = [...new Set([...e.mergedFrom, ...(m.mergedFrom ?? [])])];
-    e.lastUsed = day;
+    e.updatedAt = day;   // NOT lastUsed: that one belongs to the chat path's usage file
   } else {
     profile.memories.push({
       name: m.name, description: m.description, type: m.type, content: m.content,
-      createdAt: day, lastUsed: day, useCount: 0,
+      createdAt: day, updatedAt: day, lastUsed: day, useCount: 0,
       salience: m.salience ?? 0.5, confidence: m.confidence ?? 0.5,
       sourceRuns: m.sourceRuns ?? [], mergedFrom: m.mergedFrom ?? [],
     });
@@ -155,9 +226,11 @@ export const memoryIndex = (p: UserProfile) => p.memories.map((m) => ({ name: m.
 function daysSince(iso: string): number {
   return Math.max(0, (Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
+/** Freshest of the two writers' timestamps: last read (usage file) vs last rewrite (memories file). */
+const freshness = (m: MemoryEntry) => Math.min(daysSince(m.lastUsed), daysSince(m.updatedAt ?? m.createdAt));
 /** salience × recency — the cheap fallback ranking when no LLM. */
 function rank(m: MemoryEntry): number {
-  return m.salience * (1 / (1 + daysSince(m.lastUsed) / 30));
+  return m.salience * (1 / (1 + freshness(m) / 30));
 }
 
 function jsonArray(text: string): number[] {
@@ -194,7 +267,7 @@ export function forgetMemory(profile: UserProfile, name: string): boolean {
 
 /** Combined compaction score: importance × recency × frequency. */
 function compScore(m: MemoryEntry): number {
-  const recency = 1 / (1 + daysSince(m.lastUsed) / 30);
+  const recency = 1 / (1 + freshness(m) / 30);
   const frequency = 1 + Math.log1p(m.useCount) / 5;
   return m.salience * recency * frequency;
 }

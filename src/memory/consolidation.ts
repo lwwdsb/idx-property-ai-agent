@@ -19,7 +19,7 @@
 import type { LLMClient, ChatMessage, ToolSpec } from '../llm/client.js';
 import type { AgentRunStore } from '../agent/auto/runStore.js';
 import { logger } from '../logger.js';
-import { loadProfile, saveProfile, addMemory, forgetMemory, compactMemories, memoryIndex, type MemoryType } from './profile.js';
+import { loadProfile, saveMemories, addMemory, forgetMemory, compactMemories, memoryIndex, type MemoryType } from './profile.js';
 
 /** The memory capability domain — a whitelist DISJOINT from the business tool set. */
 export const MEMORY_TOOLS: ToolSpec[] = [
@@ -105,13 +105,13 @@ function makeExecutor(userId: string, runStore: AgentRunStore, since: number) {
         salience: typeof args.salience === 'number' ? args.salience : undefined,
         mergedFrom: Array.isArray(args.mergedFrom) ? args.mergedFrom.filter((x): x is string => typeof x === 'string') : undefined,
       });
-      saveProfile(profile);
+      saveMemories(profile);
       return `stored ${args.type} memory "${String(args.name)}"`;
     }
     if (name === 'forget_memory') {
       const profile = loadProfile(userId);
       const ok = forgetMemory(profile, String(args.name));
-      if (ok) saveProfile(profile);
+      if (ok) saveMemories(profile);
       return ok ? `forgot memory "${String(args.name)}"` : `no memory named "${String(args.name)}"`;
     }
     return `error: unknown tool "${name}" — this agent only has memory tools.`;
@@ -143,7 +143,7 @@ export async function runConsolidation(userId: string, deps: ConsolidateDeps): P
         if (watermark > since) {
           const profile = loadProfile(userId);
           profile.lastConsolidatedRunId = watermark;
-          saveProfile(profile);
+          saveMemories(profile);
         }
         logger.info('memory consolidation done', { userId, steps: step, watermark });
         return turn.content;
@@ -164,7 +164,7 @@ export async function runConsolidation(userId: string, deps: ConsolidateDeps): P
     const profile = loadProfile(userId);
     const { removed } = compactMemories(profile);
     if (removed.length) {
-      saveProfile(profile);
+      saveMemories(profile);
       logger.info('memory compacted', { userId, compacted: removed.length, removed });
     }
   }

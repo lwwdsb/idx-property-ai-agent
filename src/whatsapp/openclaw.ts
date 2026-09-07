@@ -16,7 +16,7 @@ import { getLLMClient } from '../llm/client.js';
 import { MySqlDraftStore } from '../email/drafts.js';
 import { MySqlAgentRunStore } from '../agent/auto/runStore.js';
 import { handleAgentMessage } from '../agent/auto/entry.js';
-import { loadProfile, saveProfile, learnFromFilter, preferredFilter } from '../memory/profile.js';
+import { loadProfile, saveFacts, learnFromFilter, preferredFilter } from '../memory/profile.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -51,7 +51,7 @@ export async function replyTo(msg: InboundMessage, channel: Channel = openclawCh
         registry, draftStore, llm,
         filterDefaults: preferredFilter(profile),
         onFilter: (uf) => {
-          if (Object.values(uf).some((v) => v != null)) { learnFromFilter(profile, uf); saveProfile(profile); }
+          if (Object.values(uf).some((v) => v != null)) { learnFromFilter(profile, uf); saveFacts(profile); }
         },
       });
       return result.reply;

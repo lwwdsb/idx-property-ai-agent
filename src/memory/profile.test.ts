@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import {
-  freshProfile, learnFromFilter, preferredFilter, saveProfile, loadProfile, renderMd,
+  freshProfile, learnFromFilter, preferredFilter, saveFacts, saveMemories, saveUsage, loadProfile, renderMd,
   addMemory, touchMemory, selectMemories, semanticMemories, episodicMemories, profileHint,
   compactMemories, forgetMemory,
 } from './profile.js';
@@ -81,14 +81,41 @@ await check('save/load round-trip + md renders facts and memories', () => {
   let p = freshProfile(uid);
   for (let i = 0; i < 3; i++) p = learnFromFilter(p, f({ city: 'Irvine' }));
   addMemory(p, { name: 'schools', description: 'cares about schools', type: 'semantic', content: 'likes good school zones' });
-  saveProfile(p);
+  saveFacts(p); saveMemories(p); saveUsage(p);   // one call per writer-owned file
   const loaded = loadProfile(uid);
   assert.equal(loaded.prefs.city!.value, 'Irvine');
   assert.equal(semanticMemories(loaded).length, 1);
   const md = renderMd(loaded);
   assert.ok(md.includes('Irvine') && md.includes('cares about schools'));
-  rmSync(`data/profiles/${uid}.json`, { force: true });
-  rmSync(`data/profiles/${uid}.md`, { force: true });
+  for (const suffix of ['facts.json', 'memories.json', 'usage.json', 'md']) {
+    rmSync(`data/profiles/${uid}.${suffix}`, { force: true });
+  }
+});
+
+await check('split store: the two writers do not clobber each other', () => {
+  const uid = 'test-split-user';
+  const clean = () => { for (const x of ['facts.json', 'memories.json', 'usage.json', 'md']) rmSync(`data/profiles/${uid}.${x}`, { force: true }); };
+  clean();
+  // chat path writes a fact; consolidation path writes a memory — from SEPARATE loads, the way
+  // two concurrent writers would. Under one shared file the second save would erase the first.
+  const chat = freshProfile(uid);
+  learnFromFilter(chat, f({ city: 'Irvine' }));
+  saveFacts(chat);
+
+  const agent = loadProfile(uid);
+  addMemory(agent, { name: 'm1', description: 'd', type: 'semantic', content: 'c' });
+  agent.lastConsolidatedRunId = 7;
+  saveMemories(agent);
+
+  const stale = freshProfile(uid);            // a writer that never saw the memory at all
+  learnFromFilter(stale, f({ beds: 3 }));
+  saveFacts(stale);
+
+  const merged = loadProfile(uid);
+  assert.equal(merged.prefs.beds!.value, 3, 'latest fact write wins');
+  assert.equal(merged.memories.length, 1, 'memory survives a facts-only write');
+  assert.equal(merged.lastConsolidatedRunId, 7, 'watermark survives too');
+  clean();
 });
 
 await check('compact: evicts over-capacity, keeping top-N by score', () => {

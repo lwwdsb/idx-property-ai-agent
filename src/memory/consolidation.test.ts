@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import { runConsolidation, MEMORY_TOOLS } from './consolidation.js';
-import { loadProfile, addMemory, saveProfile } from './profile.js';
+import { loadProfile, addMemory, saveMemories } from './profile.js';
 import { InMemoryAgentRunStore, type AgentRunState } from '../agent/auto/runStore.js';
 import type { LLMClient, ChatMessage, ToolSpec } from '../llm/client.js';
 
@@ -37,7 +37,11 @@ function scriptedLLM(steps: Step[], onTools?: (t: ToolSpec[]) => void, onMessage
 }
 
 const uid = 'test-consolidate-user';
-const cleanup = () => { rmSync(`data/profiles/test-consolidate-user.json`, { force: true }); rmSync(`data/profiles/test-consolidate-user.md`, { force: true }); };
+const cleanup = () => {   // every per-writer file, or a stale watermark leaks into the next case
+  for (const suffix of ['json', 'facts.json', 'memories.json', 'usage.json', 'md']) {
+    rmSync(`data/profiles/${uid}.${suffix}`, { force: true });
+  }
+};
 
 const seededStore = async () => {
   const store = new InMemoryAgentRunStore();
@@ -89,7 +93,7 @@ await check('consolidation: promotes episodics to semantic and forgets the redun
   cleanup();
   const store = await seededStore();
   // seed two episodics, then the agent promotes them into one semantic + forgets both
-  const { loadProfile: lp, addMemory: am, saveProfile: sp } = await import('./profile.js');
+  const { loadProfile: lp, addMemory: am, saveMemories: sp } = await import('./profile.js');
   const seed = lp(uid);
   am(seed, { name: 'ev-a', description: 'looked at Irvine schools', type: 'episodic', content: 'a' });
   am(seed, { name: 'ev-b', description: 'looked at Irvine schools again', type: 'episodic', content: 'b' });
@@ -132,7 +136,7 @@ const seedWeakAndStrong = () => {
   const p = loadProfile(uid);
   addMemory(p, { name: 'weak', description: 'd', type: 'semantic', content: 'c', salience: 0.01 });
   addMemory(p, { name: 'keep', description: 'd', type: 'semantic', content: 'c', salience: 0.9 });
-  saveProfile(p);
+  saveMemories(p);
 };
 
 await check('compaction still runs when the LLM burns its step budget', async () => {

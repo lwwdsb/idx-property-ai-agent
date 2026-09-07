@@ -16,7 +16,7 @@ import type { DraftStore } from '../../email/drafts.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 import type { LLMClient } from '../../llm/client.js';
 import { runAgent, resumeAgentRun, retryAgentRun } from './loop.js';
-import { loadProfile, saveProfile, profileHint, preferredFilter, selectMemories, episodicMemories, touchMemory, learnFromFilter } from '../../memory/profile.js';
+import { loadProfile, saveFacts, saveUsage, profileHint, preferredFilter, selectMemories, episodicMemories, touchMemory, learnFromFilter } from '../../memory/profile.js';
 import { parseQuery } from '../../search/parseQuery.js';
 import { isKnownCity } from '../../search/cityDictionary.js';
 import type { AgentRunStore, AgentRun } from './runStore.js';
@@ -101,11 +101,14 @@ export async function handleAgentMessage(
     // immediate FACT learning (symmetric with the deterministic mode's onFilter): parse the
     // user's OWN words (not the injected defaults) so we don't self-reinforce our own seeds.
     const userFilter = (await parseQuery(task, { isKnownCity })).filter;
-    if (Object.values(userFilter).some((v) => v != null)) learnFromFilter(profile, userFilter);
+    const learned = Object.values(userFilter).some((v) => v != null);
+    if (learned) learnFromFilter(profile, userFilter);
     // episodic memories are SELECTIVELY loaded: LLM picks the ones relevant to this task by desc
     const episodic = await selectMemories(episodicMemories(profile), task, llm);
     episodic.forEach((m) => touchMemory(profile, m.name));
-    saveProfile(profile);   // persist learned facts + memory touches
+    // Two files, both owned by this path — never the consolidation agent's memories file.
+    if (learned) saveFacts(profile);
+    if (episodic.length) saveUsage(profile);
     const res = await runAgent(task, {
       userId, registry, llm, store: runStore, progressive: deps.progressive ?? true,
       profileHint: profileHint(profile, episodic), seedFilter: preferredFilter(profile),

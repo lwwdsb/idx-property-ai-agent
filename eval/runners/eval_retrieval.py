@@ -17,7 +17,10 @@ sys.path.insert(0, os.path.join(ROOT, "eval", "metrics"))
 from search import hybrid_search  # noqa: E402
 from ir import ndcg_at_k, recall_at_k, mrr, precision_at_k, mean  # noqa: E402
 
-DATA = os.path.join(ROOT, "eval", "datasets", "retrieval.jsonl")
+# Dataset is selectable so the same comparison can run on the small hand-built set or the
+# larger stratified one.  Usage: python eval/runners/eval_retrieval.py [dataset.jsonl]
+DATA = os.path.join(ROOT, "eval", "datasets",
+                    sys.argv[1] if len(sys.argv) > 1 else "retrieval.jsonl")
 HIST = os.path.join(ROOT, "eval", "history")
 MODES = ["dense", "bm25", "hybrid"]
 

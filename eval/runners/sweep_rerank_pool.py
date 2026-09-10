@@ -14,7 +14,8 @@ from ir import ndcg_at_k, precision_at_k, mrr, mean
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 import pymysql
 
-DATA = os.path.join(ROOT, "eval", "datasets", "retrieval.jsonl")
+DATA = os.path.join(ROOT, "eval", "datasets",
+                    sys.argv[1] if len(sys.argv) > 1 else "retrieval_large.jsonl")
 cases = [json.loads(l) for l in open(DATA) if l.strip() and json.loads(l)["label"]["relevant"]]
 ce = TextCrossEncoder("Xenova/ms-marco-MiniLM-L-6-v2")
 env = load_env()
@@ -48,7 +49,7 @@ for c in cases:
         agg[n]["d"].append(ndcg_at_k(r, rel, 10) - bn)
 conn.close()
 
-print(f"24 条 judge 分级集 · CE 从 hybrid top-N 重排出 top-10\n")
+print(f"{os.path.basename(DATA)} · {len(cases)} 条 judge 分级集 · CE 从 hybrid top-N 重排出 top-10\n")
 print(f"  {'配置':<14}{'nDCG@10':>9}{'P@5':>8}{'MRR':>8}{'ΔnDCG':>9}{'胜/平/负':>10}{'t':>7}")
 print(f"  {'不重排(基线)':<12}{mean(base['ndcg']):>9.4f}{mean(base['p5']):>8.4f}{mean(base['mrr']):>8.4f}{'—':>9}{'—':>10}{'—':>7}")
 for n in NS:

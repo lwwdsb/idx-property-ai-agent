@@ -24,7 +24,12 @@ from search import hybrid_search  # noqa: E402
 from ir import ndcg_at_k, precision_at_k, mrr, mean  # noqa: E402
 from fastembed.rerank.cross_encoder import TextCrossEncoder  # noqa: E402
 
-DATA = os.path.join(ROOT, "eval", "datasets", "retrieval_large.jsonl")
+# Dataset is selectable: retrieval_large.jsonl (70, the original) was lost in the 2026-09-05
+# incident, so retrieval.jsonl (24, same schema, also LLM-judge graded) can stand in until it
+# is regenerated.  Usage: python eval/runners/eval_rerank_graded.py [dataset.jsonl]
+DEFAULT_DATA = "retrieval_large.jsonl"
+DATA = os.path.join(ROOT, "eval", "datasets",
+                    sys.argv[1] if len(sys.argv) > 1 else DEFAULT_DATA)
 
 
 def load():

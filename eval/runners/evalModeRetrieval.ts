@@ -6,8 +6,13 @@
  *   - auto:          which tools the LLM chose (no tool call == it judged this out of domain)
  *   - auto:          the real agent path — give the LLM the full tool set, capture the `search`
  *                    tool call's arguments, sanitizeFilter them (+ which tools it chose)
+ * Also records the text each path ACTUALLY feeds to vector search — auto's `semantic` tool arg,
+ * the deterministic path's extractSemanticText(). Scoring on the raw sentence instead (as this
+ * did before) understates both: city/beds/price words are already enforced by the hard filter,
+ * and they appear in nearly every listing's remarks, so they only dilute the semantic signal.
+ *
  * Writes predictions; the Python scorer (eval_mode_retrieval.py) runs hybrid_search with each
- * mode's filter and computes known-item recall + param-extraction F1 against the human gold.
+ * mode's filter + text and computes known-item recall + param-extraction F1 against the gold.
  *
  * TS does the REAL extraction (no reimplementation → no drift); Python does retrieval + metrics.
  * Needs LLM_API_KEY (auto extraction). Run:  npx tsx eval/runners/evalModeRetrieval.ts
@@ -17,7 +22,7 @@ import { parseQuery } from '../../src/search/parseQuery.js';
 import { classifyIntent } from '../../src/orchestrator/intent.js';
 import { isKnownCity } from '../../src/search/cityDictionary.js';
 import { getLLMClient, sanitizeFilter } from '../../src/llm/client.js';
-import { buildRegistry } from '../../src/orchestrator/skills.js';
+import { buildRegistry, extractSemanticText } from '../../src/orchestrator/skills.js';
 import { pythonBridge } from '../../src/orchestrator/bridge.js';
 import { toolSpecs } from '../../src/agent/auto/tools.js';
 import { InMemoryDraftStore } from '../../src/email/drafts.js';
@@ -72,7 +77,9 @@ async function main() {
       console.error(`  ! auto extraction failed for ${c.id}: ${String(e)}`);
     }
 
-    preds.push({ id: c.id, regex_filter: regex, regex_intent: regexIntent,
+    // what production would actually send to /search on each path (skills.ts:139-141)
+    const regexSemantic = extractSemanticText(c.input, regex);
+    preds.push({ id: c.id, regex_filter: regex, regex_intent: regexIntent, regex_semantic: regexSemantic,
                  auto_filter: autoFilter, auto_semantic: autoSemantic, auto_tools: toolsCalled });
     console.log(`  ${c.id} [${c.style}/${c.lang}] intent=${regexIntent} tools=${toolsCalled.join(',')||'-'}`);
   }

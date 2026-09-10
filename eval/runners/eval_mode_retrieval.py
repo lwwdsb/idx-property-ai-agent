@@ -45,6 +45,9 @@ def prf(pred: dict, gold: dict):
 
 
 def retrieve_ids(text, flt_fields, k=20):
+    """`text` must be the SEMANTIC text the mode would really send (see caller), not the raw
+    sentence: structured tokens are already enforced by the filter and appear in almost every
+    listing, so leaving them in dilutes the vector signal."""
     flt = build_filter(
         city=flt_fields.get("city"), max_price=flt_fields.get("maxPrice"),
         min_price=flt_fields.get("minPrice"), min_beds=flt_fields.get("beds"),
@@ -93,7 +96,8 @@ def main():
             continue
         hits = {}
         for m, key in modes.items():
-            ids = retrieve_ids(c["input"], preds[cid][key], k=20)
+            sem = (preds[cid].get("auto_semantic" if m == "auto" else "regex_semantic") or "").strip()
+            ids = retrieve_ids(sem or c["input"], preds[cid][key], k=20)
             h5, h10, h20 = int(ki in ids[:5]), int(ki in ids[:10]), int(ki in ids[:20])
             hits[m] = h10
             for bucket in (c["style"], "ALL"):

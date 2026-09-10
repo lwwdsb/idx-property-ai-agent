@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>IDX 房产 AI 助手 — 架构概览</title>
+<style>
+  @page { size: A4; margin: 12mm 13mm; }
+  * { box-sizing: border-box; }
+  body { margin:0; color:#1a1d21;
+         font: 11px/1.7 "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, sans-serif; }
+  a { color:#2563eb; text-decoration:none; }
+
+  .links { display:flex; gap:20px; align-items:baseline; font-size:11px; padding-bottom:8px;
+           border-bottom:1.5px solid #1a1d21; margin-bottom:14px; }
+  .links .who { font-weight:700; font-size:14px; letter-spacing:.5px; margin-right:auto; }
+
+  h1 { font-size:22px; margin:0 0 6px; letter-spacing:.5px; }
+  .sub { color:#555b63; font-size:11px; margin:0 0 16px; line-height:1.75; }
+  .sub b { color:#1a1d21; }
+
+  .flow { border:1px solid #d7dbe0; border-radius:7px; padding:14px 15px 16px; background:#fcfcfd; }
+  .row { display:flex; gap:8px; align-items:stretch; }
+  .box { border:1px solid #c8cdd4; border-radius:5px; padding:8px 11px; background:#fff; flex:1; }
+  .box .t { font-weight:600; font-size:11.5px; letter-spacing:.3px; }
+  .box .d { color:#6b7280; font-size:10px; margin-top:3px; line-height:1.65; }
+  .arrow { text-align:center; color:#9aa1ab; font-size:12px; line-height:1; margin:7px 0; letter-spacing:.5px; }
+
+  .accent { border-color:#2563eb; background:#f5f8ff; } .accent .t { color:#1d4ed8; }
+  .warm { border-color:#c2410c; background:#fff7ed; }   .warm .t { color:#c2410c; }
+  .gate { border-color:#15803d; background:#f2fbf4; }   .gate .t { color:#15803d; }
+
+  .lane { flex:1; border:1px dashed #b9c0c9; border-radius:6px; padding:8px 9px 9px; background:#fff; }
+  .lane > .hd { font-weight:600; font-size:11.5px; margin-bottom:5px; display:flex; justify-content:space-between; align-items:center; }
+  .lane .tag { font-weight:500; font-size:9px; color:#fff; background:#64748b; border-radius:3px; padding:1.5px 6px; letter-spacing:.3px; }
+  .lane.a .tag { background:#1d4ed8; }
+  .lane .step { font-size:10px; color:#4b5563; padding:3.5px 0; border-top:1px solid #eef0f3; line-height:1.6; }
+  .lane .step:first-of-type { border-top:0; }
+
+  .skills { display:flex; gap:6px; }
+  .skill { flex:1; text-align:center; border:1px solid #c8cdd4; border-radius:5px; padding:7px 4px; background:#fff; }
+  .skill .n { font-weight:600; font-size:10.5px; }
+  .skill .s { color:#7b828c; font-size:9px; margin-top:2px; }
+
+  h2 { font-size:12px; margin:18px 0 8px; letter-spacing:1px; color:#374151; }
+  .cols { display:flex; gap:11px; }
+  .card { flex:1; border-left:2.5px solid #1a1d21; padding:1px 0 1px 9px; }
+  .card .h { font-weight:600; font-size:11px; margin-bottom:3px; }
+  .card p { margin:0; font-size:10px; color:#4b5563; line-height:1.7; }
+  .stack { margin-top:15px; padding-top:10px; border-top:1px solid #e3e6ea; font-size:10.5px; color:#4b5563; }
+  .stack b { color:#1a1d21; }
+</style>
+
+<div class="links">
+  <span class="who">李伟文</span>
+  <a href="https://github.com/lwwdsb">github.com/lwwdsb</a>
+  <a href="https://www.linkedin.com/in/weiwen-li/">linkedin.com/in/weiwen-li</a>
+</div>
+
+<h1>IDX 房产 AI 助手</h1>
+<p class="sub">面向生产环境的房地产助手，覆盖 <b>约 14.5 万条加州 MLS 房源与成交数据</b>。用户在 WhatsApp 上用大白话提问，
+系统听懂、查真实数据、给出答案 —— 而<b>每一个不可逆的动作都由代码把关，不靠提示词约束</b>。</p>
+
+<div class="flow">
+  <div class="row"><div class="box"><div class="t">用户 · WhatsApp</div><div class="d">自然语言，中英文皆可，支持多轮追问</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="row"><div class="box"><div class="t">OpenClaw 网关 —— 薄前台</div><div class="d">第三方 agent 只负责传话，且只能调用一个工具。控制权始终留在自己这边。</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="row"><div class="box accent"><div class="t">编排服务</div><div class="d">判断意图 → 分派任务。限流、幂等、降级都收口在这一层。</div></div></div>
+  <div class="arrow">▼ &nbsp; 两条路径，由用户选择 &nbsp; ▼</div>
+
+  <div class="row">
+    <div class="lane"><div class="hd"><span>确定性流水线</span><span class="tag">默认</span></div>
+      <div class="step">规则 + 向量分类器判定意图</div>
+      <div class="step">正则抽取条件，LLM 仅作兜底</div>
+      <div class="step">多步请求走固定配方，不自主循环</div>
+      <div class="step"><b>约 5 毫秒</b> · 行为可预测 · 可完整测试</div>
+    </div>
+    <div class="lane a"><div class="hd"><span>自主 agent</span><span class="tag">可选</span></div>
+      <div class="step">ReAct 循环，由 LLM 自己决定调用哪个工具</div>
+      <div class="step">复用同一套能力，不另写一份工具</div>
+      <div class="step">遇到外发动作挂起，人工批准后恢复续跑</div>
+      <div class="step"><b>约 3.5 秒</b> · 口语与中文输入上明显更强</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ &nbsp; 两条路径调用同一套能力 &nbsp; ▼</div>
+  <div class="skills">
+    <div class="skill"><div class="n">搜房</div><div class="s">条件 + 语义</div></div>
+    <div class="skill"><div class="n">行情</div><div class="s">成交数据统计</div></div>
+    <div class="skill"><div class="n">推荐</div><div class="s">附价格审查</div></div>
+    <div class="skill"><div class="n">知识问答</div><div class="s">RAG，带出处</div></div>
+    <div class="skill gate"><div class="n">邮件</div><div class="s">仅能起草</div></div>
+  </div>
+  <div class="arrow">▼</div>
+
+  <div class="row">
+    <div class="box warm" style="flex:2"><div class="t">常驻检索服务</div><div class="d">混合检索（关键词 + 向量）→ 交叉编码器精排。模型启动时加载一次并常驻，比每次调用现起进程<b>快约 160 倍</b>。向量模型跑在本地，不需要 embedding 的 API key，检索零调用成本。</div></div>
+    <div class="box gate"><div class="t">审批闸</div><div class="d">对外邮件一律<b>先起草 → 人工批准 → 才发送</b>。模型手里根本没有"发送"这个工具 —— 限制是结构性的，不是提示词。</div></div>
+  </div>
+  <div class="arrow">▼</div>
+  <div class="row">
+    <div class="box"><div class="t">MySQL</div><div class="d">在售房源与历史成交，事实的唯一来源</div></div>
+    <div class="box"><div class="t">Qdrant</div><div class="d">房源向量，支撑语义匹配</div></div>
+    <div class="box"><div class="t">用户画像</div><div class="d">跨会话的长期记忆</div></div>
+  </div>
+</div>
+
+<h2>设计原则</h2>
+<div class="cols">
+  <div class="card"><div class="h">LLM 只放在边缘</div><p>路由、SQL、价格核验、发送闸门全部是确定性代码。模型只用在它不可替代的地方：听懂模糊表达、把数据组织成人话。</p></div>
+  <div class="card"><div class="h">模型不产出事实</div><p>价格和地址一律由数据库记录渲染。运行时还有一道反幻觉闸，会剥掉模型编造的、本轮并未真实检索到的房源编号。</p></div>
+  <div class="card"><div class="h">鲁棒性有固定优先级</div><p>绝不发出错误的对外消息 &gt; 绝不自信地说错话 &gt; 哪怕降级也要有回应。冲突时按这个顺序裁决，可由机器执行。</p></div>
+  <div class="card"><div class="h">用评测说话</div><p>每块能力都有人工标注的评测集和一键跑的评测套件，性能退化会变成一个数字，而不是上线后的意外。</p></div>
+</div>
+
+<div class="stack"><b>技术栈</b> &nbsp; TypeScript · Python · MySQL · Qdrant · FastAPI · fastembed（本地 <i>bge-small</i> + 交叉编码器）· DeepSeek · OpenClaw · WhatsApp</div>

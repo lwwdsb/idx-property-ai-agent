@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>IDX Property AI Agent — Architecture Overview</title>
+<style>
+  @page { size: A4; margin: 12mm 13mm; }
+  * { box-sizing: border-box; }
+  body { margin:0; font: 11.6px/1.55 -apple-system, "Helvetica Neue", Arial, sans-serif; color:#1a1d21; }
+  a { color:#2563eb; text-decoration:none; }
+
+  .links { display:flex; gap:20px; align-items:baseline; font-size:11px; padding-bottom:8px;
+           border-bottom:1.5px solid #1a1d21; margin-bottom:13px; }
+  .links .who { font-weight:700; font-size:13.5px; letter-spacing:.2px; margin-right:auto; }
+
+  h1 { font-size:22px; margin:0 0 5px; letter-spacing:-.2px; }
+  .sub { color:#555b63; font-size:11.5px; margin:0 0 16px; }
+  .sub b { color:#1a1d21; }
+
+  .flow { border:1px solid #d7dbe0; border-radius:7px; padding:14px 15px 16px; background:#fcfcfd; }
+  .row { display:flex; gap:8px; align-items:stretch; }
+  .box { border:1px solid #c8cdd4; border-radius:5px; padding:8px 11px; background:#fff; flex:1; }
+  .box .t { font-weight:700; font-size:11.5px; }
+  .box .d { color:#6b7280; font-size:10px; margin-top:2px; line-height:1.4; }
+  .arrow { text-align:center; color:#9aa1ab; font-size:13px; line-height:1; margin:7px 0; }
+
+  .accent { border-color:#2563eb; background:#f5f8ff; }
+  .accent .t { color:#1d4ed8; }
+  .warm { border-color:#c2410c; background:#fff7ed; }
+  .warm .t { color:#c2410c; }
+  .gate { border-color:#15803d; background:#f2fbf4; }
+  .gate .t { color:#15803d; }
+
+  .lane { flex:1; border:1px dashed #b9c0c9; border-radius:6px; padding:7px 8px 8px; background:#fff; }
+  .lane > .hd { font-weight:700; font-size:11px; margin-bottom:5px; display:flex; justify-content:space-between; }
+  .lane .tag { font-weight:600; font-size:8.5px; color:#fff; background:#64748b; border-radius:3px; padding:1px 5px; }
+  .lane.a .tag { background:#1d4ed8; }
+  .lane .step { font-size:10px; color:#4b5563; padding:3.5px 0; border-top:1px solid #eef0f3; }
+  .lane .step:first-of-type { border-top:0; }
+
+  .skills { display:flex; gap:6px; }
+  .skill { flex:1; text-align:center; border:1px solid #c8cdd4; border-radius:5px; padding:7px 4px; background:#fff; }
+  .skill .n { font-weight:700; font-size:10.5px; }
+  .skill .s { color:#7b828c; font-size:9px; margin-top:1px; }
+
+  h2 { font-size:12px; margin:18px 0 8px; letter-spacing:.3px; text-transform:uppercase; color:#374151; }
+  .cols { display:flex; gap:11px; }
+  .card { flex:1; border-left:2.5px solid #1a1d21; padding:1px 0 1px 8px; }
+  .card .h { font-weight:700; font-size:11px; margin-bottom:2px; }
+  .card p { margin:0; font-size:10.3px; color:#4b5563; line-height:1.5; }
+  .stack { margin-top:15px; padding-top:10px; border-top:1px solid #e3e6ea; font-size:10.5px; color:#4b5563; }
+  .stack b { color:#1a1d21; }
+</style>
+
+<div class="links">
+  <span class="who">Weiwen Li</span>
+  <a href="https://github.com/lwwdsb">github.com/lwwdsb</a>
+  <a href="https://www.linkedin.com/in/weiwen-li/">linkedin.com/in/weiwen-li</a>
+</div>
+
+<h1>IDX Property AI Agent</h1>
+<p class="sub">A production-oriented real-estate assistant over <b>~145k California MLS listings</b>. Users ask in plain
+language on WhatsApp; the system understands, queries real data, and answers — with <b>every irreversible action gated by code, not by prompts</b>.</p>
+
+<div class="flow">
+  <div class="row"><div class="box"><div class="t">User · WhatsApp</div><div class="d">Natural language, EN / 中文, multi-turn</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="row"><div class="box"><div class="t">OpenClaw gateway — thin front door</div><div class="d">Third-party agent relays the message; it calls exactly one tool. Control stays on our side.</div></div></div>
+  <div class="arrow">▼</div>
+  <div class="row"><div class="box accent"><div class="t">Orchestrate service</div><div class="d">Intent classification → route. Rate limiting · idempotency · graceful degradation live here.</div></div></div>
+  <div class="arrow">▼ &nbsp; two routes, user-selectable &nbsp; ▼</div>
+
+  <div class="row">
+    <div class="lane"><div class="hd"><span>Deterministic pipeline</span><span class="tag">default</span></div>
+      <div class="step">Rules + embedding classifier decide intent</div>
+      <div class="step">Regex parses filters, LLM only as fallback</div>
+      <div class="step">Fixed recipes for multi-step requests</div>
+      <div class="step"><b>~5&nbsp;ms</b> · predictable · fully testable</div>
+    </div>
+    <div class="lane a"><div class="hd"><span>Autonomous agent</span><span class="tag">opt-in</span></div>
+      <div class="step">ReAct loop: the LLM picks its own tools</div>
+      <div class="step">Reuses the same skills — no second toolset</div>
+      <div class="step">Suspends for human approval, resumes later</div>
+      <div class="step"><b>~3.5&nbsp;s</b> · handles messy &amp; 中文 input better</div>
+    </div>
+  </div>
+
+  <div class="arrow">▼ &nbsp; both routes call the same capabilities &nbsp; ▼</div>
+  <div class="skills">
+    <div class="skill"><div class="n">Search</div><div class="s">filters + semantics</div></div>
+    <div class="skill"><div class="n">Market</div><div class="s">sold-comp stats</div></div>
+    <div class="skill"><div class="n">Recommend</div><div class="s">+ price verifier</div></div>
+    <div class="skill"><div class="n">Q&amp;A</div><div class="s">RAG, cited</div></div>
+    <div class="skill gate"><div class="n">Email</div><div class="s">draft only</div></div>
+  </div>
+  <div class="arrow">▼</div>
+
+  <div class="row">
+    <div class="box warm" style="flex:2"><div class="t">Warm retrieval service</div><div class="d">Hybrid search (keyword + vector) → cross-encoder re-rank. Models preloaded once and kept hot — <b>160× faster</b> than spawning per call. Embeddings run locally: no embedding API key, no per-query cost.</div></div>
+    <div class="box gate"><div class="t">Approval gate</div><div class="d">Outbound email is <b>draft → human approves → send</b>. The model has no send tool at all — the limit is structural, not a prompt.</div></div>
+  </div>
+  <div class="arrow">▼</div>
+  <div class="row">
+    <div class="box"><div class="t">MySQL</div><div class="d">Listings &amp; sold comps — the only source of facts</div></div>
+    <div class="box"><div class="t">Qdrant</div><div class="d">Listing vectors for semantic matching</div></div>
+    <div class="box"><div class="t">User profile</div><div class="d">Long-term memory across sessions</div></div>
+  </div>
+</div>
+
+<h2>Design principles</h2>
+<div class="cols">
+  <div class="card"><div class="h">The LLM lives at the edges</div><p>Routing, SQL, price checks and the send gate are deterministic code. The model is used only where it is irreplaceable: understanding vague phrasing and wording an answer.</p></div>
+  <div class="card"><div class="h">The model never authors facts</div><p>Prices and addresses are rendered from database rows. A runtime grounding gate strips any listing id the model did not actually retrieve.</p></div>
+  <div class="card"><div class="h">Robustness has a fixed order</div><p>Never send a wrong outbound message &gt; never be confidently wrong &gt; always stay responsive. A machine-checkable tie-breaker when goals conflict.</p></div>
+  <div class="card"><div class="h">Measured, not asserted</div><p>Every capability has a labelled eval set and a one-command suite, so a regression shows up as a number rather than a surprise.</p></div>
+</div>
+
+<div class="stack"><b>Stack</b> &nbsp; TypeScript · Python · MySQL · Qdrant · FastAPI · fastembed (local <i>bge-small</i> + cross-encoder) · DeepSeek · OpenClaw · WhatsApp</div>

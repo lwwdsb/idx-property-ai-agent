@@ -22,7 +22,9 @@ from recommend import validate_price, recommend as do_recommend, format_reco
 from search import hybrid_search, build_filter
 
 RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"   # small cross-encoder; L-12 gave no gain
-RERANK_COARSE = 30                                # coarse pool -> CE rerank -> top-k
+RERANK_COARSE = 20   # coarse pool -> CE rerank -> top-k. Swept on the 70-query graded set
+                     # (sweep_rerank_pool.py): 20 gains +0.14 nDCG@10 where 30 gains only
+                     # +0.06; past ~50 rerank turns negative (noise promoted from too deep).
 
 # Example utterances per skill — the embedding intent classifier matches a message
 # against these (generalizes past regex). Kept small; embedded once at startup.

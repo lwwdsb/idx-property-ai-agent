@@ -260,6 +260,67 @@ function jsonArray(text: string): number[] | null {
   } catch { return null; }
 }
 
+/**
+ * The selector's instructions.
+ *
+ * The first version said only "pick the RELEVANT ones", and a conservative reading of "relevant"
+ * cost recall: measured 0.729, missing 5 of 18 gold items across 10 cases — including the episodic
+ * memory needed to resolve "这套", without which the reference cannot be resolved at all.
+ *
+ * The rules below are CATEGORIES, deliberately not hints about particular cases: what makes a
+ * memory bear on a task, not which memory to pick. Rules 1-3 are the recall half, 4-5 the
+ * precision half.
+ *
+ * Rule 4 was written twice, and the second version is the interesting one. Rule 3 originally read
+ * "how the user wants things presented", and the selector duly attached "prefers short answers" to
+ * every task that produced a reply — which is every task, so the model was reading the rule
+ * correctly. Banning it outright then broke the one case whose entire gold answer IS that memory:
+ * a bare domain question, where response style is the only thing any memory can contribute. So a
+ * standing style preference is not irrelevant and not always relevant — it is DOMINATED: worth
+ * nothing beside a substantive memory, and worth having when there is no substantive memory to
+ * have. It reads as a priority ordering, not a relevance test, which is the tell that it does not
+ * really belong in a per-task selector at all — see docs/todo.md.
+ *
+ * The final instruction leans toward inclusion, and that lean is an architectural consequence
+ * rather than a preference: structured constraints no longer travel through here at all (see
+ * memoryDerivedFilter), so this output only shapes the PROSE hint. Over-selecting now costs prompt
+ * noise; under-selecting still loses something the user already said. The empty answer stays fully
+ * available, and the two empty-gold probes hold it to that.
+ */
+const SELECT_PROMPT = [
+  'You pick which stored memories about this user are RELEVANT to the current task.',
+  'Each line is "i: [semantic|episodic] [name] description" — semantic = a generalized preference,',
+  'episodic = a past event.',
+  '',
+  'A memory is relevant when any of these hold:',
+  '1. The task will PRODUCE OR EVALUATE LISTINGS — including when they are emailed, summarised or',
+  '   compared rather than shown — and the memory narrows or ranks listings (budget, beds, type,',
+  '   features, area). Every such preference applies, not just the closest one.',
+  '2. The task contains a REFERENCE that cannot be resolved without history — "这套", "那套",',
+  '   "上次", "第一个", "#2", "the first one". The episodic memory that resolves it is REQUIRED;',
+  '   without it the reference is unresolvable. Pick the ONE episodic that matches every',
+  '   descriptor in the reference (what it was, who it was for, when): a near-miss episodic that',
+  '   matches some descriptors and contradicts another is a distractor, not a second candidate.',
+  '3. The memory says WHICH DIMENSION this user weighs when judging — resale vs living in, schools',
+  '   vs commute — and the task asks for a judgement. This is about what to weigh, not about',
+  '   response formatting.',
+  '',
+  'Two rules cut the other way:',
+  '4. A global response-style preference (e.g. "prefers short answers") applies to any reply at',
+  '   all, so it is the LOWEST-priority memory: it adds nothing once substantive, task-specific',
+  '   memories are selected, and you should leave it out then. Include it only when NO substantive',
+  '   memory applies and the task still needs a real answer — a plain domain question, say.',
+  '5. A memory about a field the TASK ITSELF gives a value for is superseded by the task. This',
+  '   holds even when the task phrases it as a change from the old value ("raise the budget to X",',
+  '   "预算放宽到 X") — the new value replaces the memory outright, so do not select it. Drop only',
+  '   the memory about that one field; every other stored preference still applies.',
+  '',
+  'Return a JSON array of the relevant indices (e.g. [0,2]).',
+  'Return [] — and mean it — when the task is a greeting, small talk, or has nothing to do with',
+  'property or with this user\'s history. Otherwise, when a memory plausibly bears on the task,',
+  'include it: a missing preference is a worse outcome than an extra one.',
+].join('\n');
+
 export interface SelectLimits { semantic?: number; episodic?: number; }
 /**
  * Selectively load the memories relevant to the current task — BOTH types.
@@ -295,9 +356,7 @@ export async function selectMemories(
   if (!llm?.chatWithTools) return byRank();
   const index = memories.map((m, i) => `${i}: [${m.type}] [${m.name}] ${m.description}`).join('\n');
   const turn = await llm.chatWithTools([
-    { role: 'system', content: 'You pick which stored memories about this user are RELEVANT to the current task. '
-      + 'Each line is "i: [semantic|episodic] [name] description" — semantic = a generalized preference, '
-      + 'episodic = a past event. Return a JSON array of the relevant indices (e.g. [0,2]); [] if none.' } as ChatMessage,
+    { role: 'system', content: SELECT_PROMPT } as ChatMessage,
     { role: 'user', content: `Memories:\n${index}\n\nCurrent task: ${context}` } as ChatMessage,
   ], []);
   const idx = jsonArray(turn.content);

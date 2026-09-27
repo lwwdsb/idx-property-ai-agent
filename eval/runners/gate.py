@@ -12,6 +12,23 @@ TWO KINDS OF RULE, because two kinds of thing can go wrong:
   (1/n), so a metric cannot be declared "regressed" by a single flipped case, and cannot be
   declared "improved" by one either.
 
+  1/n IS THE DEFAULT, NOT THE TRUTH, and a metric may override it with a MEASURED band (the
+  6th field below). Two ways 1/n understates the real noise, both found by measurement rather
+  than argument:
+
+  ITEM-WEIGHTED METRICS. 1/n assumes one case moves the metric by 1/n, which holds for a
+  case-weighted rate like exact_match. Precision and recall over memory selection are weighted
+  by ITEM (18 gold items across 10 cases, unevenly — one case carries 3), so a single flipped
+  case can move recall by 3/18 = 0.167, well past the 0.100 the case count implies.
+
+  A NON-DETERMINISTIC PRODUCER. Metrics whose value comes out of an LLM call are not fixed by
+  temperature=0: repeating the memory-selection eval 5 times with an IDENTICAL prompt gave
+  recall 0.604-0.812 and exact_match 0.500-0.600 on one prompt version, while another version
+  of the same prompt returned bit-identical numbers all 5 times. So the noise band is a
+  property of the prompt, not just of the set, and it has to be re-measured when the prompt
+  changes. Measure it by running the same config N times; never infer an improvement from a
+  single run whose band you have not established.
+
 WHAT IS DELIBERATELY NOT GATED. The whitelist follows the credibility ordering the project
 already records per metric: objective gold and human labels may gate; LLM-judge grades may
 not. retrieval.metrics.json (nDCG from DeepSeek grades) is excluded for TWO independent
@@ -45,7 +62,9 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 HIST = os.path.join(ROOT, "eval", "history")
 BASELINE = os.path.join(ROOT, "eval", "baseline.json")
 
-# (file, dotted path, label, direction, n_key) — tolerance is derived from n: one sample.
+# (file, dotted path, label, direction, n_key, [measured_noise])
+# tolerance = measured_noise when given, else 1/n (one sample). Give a measured band only with a
+# comment saying how many repeats produced it — an unsourced number here silently widens the gate.
 GATED = [
     ("intent_parse.metrics.json", "intent.accuracy_in_set", "intent accuracy (in gold set)", "up", "intent.n"),
     ("intent_parse.metrics.json", "intent.macro_f1", "intent macro-F1", "up", "intent.n"),
@@ -55,8 +74,11 @@ GATED = [
     ("e2e.metrics.json", "pass_rate", "end-to-end pass rate", "up", "n"),
     ("agent.metrics.json", "pass_rate", "agent pass rate", "up", "n"),
     ("memory_facts.metrics.json", "pass_rate", "memory facts pass rate", "up", "n"),
-    ("memory_select.metrics.json", "arms.llm.precision", "memory injection precision", "up", "n"),
-    ("memory_select.metrics.json", "arms.llm.recall", "memory injection recall", "up", "n"),
+    # Bands below measured over 5 identical repeats per prompt version (2026-09-27, 10 cases /
+    # 18 gold items). The current prompt repeated bit-identically; the previous one swung
+    # precision 0.800-0.900 and recall 0.604-0.812, so the wider of the two is the honest gate.
+    ("memory_select.metrics.json", "arms.llm.precision", "memory injection precision", "up", "n", 0.10),
+    ("memory_select.metrics.json", "arms.llm.recall", "memory injection recall", "up", "n", 0.21),
     ("memory_dynamics.metrics.json", "pass_rate", "memory dynamics pass rate", "up", "n"),
     ("memory_utility.metrics.json", "pass_rate", "memory utility pass rate", "up", "n"),
     ("memory_utility.metrics.json", "utility_rate", "memory changed the outcome (positives)", "up", "n"),
@@ -120,15 +142,18 @@ def collect():
             stale.add(name)
             d = None
         files[name] = d
-    for name, path, label, direction, n_key in GATED:
+    for spec in GATED:
+        name, path, label, direction, n_key = spec[:5]
+        measured = spec[5] if len(spec) > 5 else None
         d = files.get(name)
         v = dig(d, path) if d else None
         n = dig(d, n_key) if d else None
         if v is None:
             missing.append(f"{name}:{path}" + ("  [STALE FILE — not from this run]" if name in stale else ""))
             continue
-        cur[f"{name}:{path}"] = {"label": label, "value": v, "direction": direction,
-                                 "n": n, "tolerance": round(1.0 / n, 4) if n else 0.0}
+        tol = measured if measured is not None else (round(1.0 / n, 4) if n else 0.0)
+        cur[f"{name}:{path}"] = {"label": label, "value": v, "direction": direction, "n": n,
+                                 "tolerance": tol, "tolerance_source": "measured" if measured is not None else "1/n"}
     for name, path, want, why in HARD:
         d = files.get(name)
         v = dig(d, path) if d else None
@@ -166,7 +191,8 @@ def main():
             if worse > m["tolerance"]:
                 regress.append((m["label"], b["value"], m["value"], m["tolerance"], m["n"]))
             elif abs(delta) > m["tolerance"]:
-                improved.append((m["label"], b["value"], m["value"], f"beyond 1-sample tolerance"))
+                improved.append((m["label"], b["value"], m["value"],
+                                 f"beyond the {m.get('tolerance_source','1/n')} noise band ±{m['tolerance']}"))
             else:
                 unchanged.append((m["label"], b["value"], m["value"]))
 
@@ -185,9 +211,9 @@ def main():
         print("No baseline yet. Review the report, then: python eval/runners/gate.py --accept")
     else:
         if regress:
-            print("REGRESSED beyond the one-sample tolerance:")
+            print("REGRESSED beyond the noise band:")
             for label, b, c, tol, n in regress:
-                print(f"  ✗ {label}: {b} -> {c}  (tolerance ±{tol} = 1/{n})")
+                print(f"  ✗ {label}: {b} -> {c}  (tolerance ±{tol})")
         if improved:
             print("IMPROVED:")
             for label, b, c, note in improved:

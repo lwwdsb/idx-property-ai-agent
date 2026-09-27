@@ -10,27 +10,82 @@ import json
 import os
 from datetime import datetime, timezone
 
+from provenance import load_stamp
+
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HIST = os.path.join(ROOT, "eval", "history")
 REPORT = os.path.join(ROOT, "eval", "report.md")
 
 
-def load(name):
+SKIPPED = []   # (file, missing key) for sections dropped because the schema moved
+
+
+def load(name, *required):
+    """Read a metrics file, but treat a SCHEMA MISMATCH as absent rather than crashing.
+
+    eval/history/ accumulates artifacts from different code versions with no version marker
+    (e.g. an agent.metrics.json from the 8-task era has no "grounding"/"safety" keys, which
+    the renderer below indexes directly). A stale file must not take down the whole report —
+    the loop needs the report step to survive one runner being out of date, and a silently
+    half-rendered report is worse than one that names what it dropped.
+    """
     path = os.path.join(HIST, name)
-    return json.load(open(path)) if os.path.exists(path) else None
+    if not os.path.exists(path):
+        return None
+    data = json.load(open(path))
+    for key in required:
+        if key not in data:
+            SKIPPED.append((name, key))
+            return None
+    return data
+
+
+def _provenance_block():
+    """What this run is comparable to. Two reports may only be compared when the code,
+    the parameters AND the datasets match — otherwise the delta has no single cause."""
+    st = load_stamp()
+    if not st:
+        return ["> **No run stamp.** This report was not produced by `make eval`, so its numbers",
+                "> cannot be compared against another run (code / parameters / datasets unknown).", ""]
+    g, t = st["git"], st.get("tuning")
+    warn = "  \u26a0\ufe0f **uncommitted changes — not reproducible from this commit**" if g["dirty"] else ""
+    total = sum(d["lines"] for d in st["datasets"].values())
+    off = [k for k, v in st["env"].items() if not v]
+    out = ["## Provenance", "",
+           f"| | |", "|---|---|",
+           f"| run at | {st['at']} |",
+           f"| commit | `{g['commit']}` on `{g['branch']}`{warn} |",
+           f"| tuning | `{t['path']}` sha `{t['sha256']}` |" if t else "| tuning | **MISSING** |",
+           f"| datasets | {len(st['datasets'])} files, {total} labelled rows |",
+           f"| seed | {st['seed']} |"]
+    if off:
+        out.append(f"| unset env | {', '.join(off)} — those paths ran in their fallback mode |")
+    svc = st.get("services", {})
+    if svc:
+        out.append("| services | " + ", ".join(
+            f"{k}={'up' if v else 'DOWN (that suite used its fallback path)'}" for k, v in svc.items()) + " |")
+    for name, key in SKIPPED:
+        out.append(f"| dropped | `{name}` predates key `{key}` — section omitted, re-run its runner |")
+    out += ["", "<details><summary>dataset fingerprints (a changed ruler makes runs incomparable)"
+            "</summary>", "", "| dataset | rows | sha256 |", "|---|---|---|"]
+    for name, d in st["datasets"].items():
+        out.append(f"| {name} | {d['lines']} | `{d['sha256']}` |")
+    out += ["", "</details>", ""]
+    return out
 
 
 def main():
-    ip = load("intent_parse.metrics.json")
+    ip = load("intent_parse.metrics.json", "intent", "parse")
     e2e = load("e2e.metrics.json")
-    agent = load("agent.metrics.json")
-    ret = load("retrieval.metrics.json")
+    agent = load("agent.metrics.json", "grounding", "safety", "pass_rate", "n")
+    ret = load("retrieval.metrics.json", "per_mode")
     rag = load("rag.metrics.json")
     tune = load("tuning.metrics.json")
     lat = load("latency.metrics.json")
     now = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     lines = [f"# IDX Evaluation Report", "", f"_Generated {now}_", ""]
+    lines += _provenance_block()
 
     # ---- headline ----
     lines += ["## Headline", "", "| Capability | Metric | Value |", "|---|---|---|"]
@@ -170,7 +225,10 @@ def main():
         f.write("\n".join(lines))
 
     # regression snapshot
-    snap = {"at": now, "intent_parse": ip, "e2e": e2e, "agent": agent, "retrieval": ret, "rag": rag}
+    # The stamp goes INTO the snapshot: a regression snapshot without provenance cannot
+    # be compared to the next one (this is the whole point of 0.2).
+    snap = {"at": now, "provenance": load_stamp(), "intent_parse": ip, "e2e": e2e,
+            "agent": agent, "retrieval": ret, "rag": rag}
     stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
     with open(os.path.join(HIST, f"snapshot-{stamp}.json"), "w") as f:
         json.dump(snap, f, indent=2)

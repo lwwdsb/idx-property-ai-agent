@@ -41,6 +41,7 @@ down:           ## stop the app services (orchestrate + retrieval)
 	bash scripts/stop-local.sh
 
 eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant + LLM key)
+	python eval/runners/provenance.py
 	python eval/metrics/test_metrics.py
 	npx tsx eval/runners/evalIntentParse.ts
 	python eval/runners/report_intent_parse.py

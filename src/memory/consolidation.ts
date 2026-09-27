@@ -46,6 +46,22 @@ export const MEMORY_TOOLS: ToolSpec[] = [
         content: { type: 'string' },
         salience: { type: 'number', description: '0-1 importance' },
         mergedFrom: { type: 'array', items: { type: 'string' }, description: 'names of memories this consolidates (promotion/merge lineage)' },
+        slots: {
+          type: 'object',
+          description: 'REQUIRED whenever the memory expresses a concrete search constraint. State it '
+            + 'structurally here as well as in prose, because prose is not parsed — a requirement '
+            + 'written as "listings without a pool must be filtered out" cannot be read back '
+            + 'reliably. Omit entirely for memories that are not search constraints.',
+          properties: {
+            maxPrice: { type: 'number', description: 'USD upper budget' },
+            minPrice: { type: 'number', description: 'USD lower bound' },
+            beds: { type: 'number', description: 'minimum bedrooms' },
+            baths: { type: 'number', description: 'minimum bathrooms' },
+            propertyType: { type: 'string', enum: ['condo', 'townhouse', 'single-family'] },
+            pool: { type: 'boolean', description: 'true = must have a pool, false = must NOT' },
+            minSqft: { type: 'number' },
+          },
+        },
       },
       required: ['name', 'description', 'type', 'content'],
     },
@@ -63,6 +79,9 @@ const SYSTEM = [
   'notable events (episodic). You have NO other capabilities: you cannot search, email, or act.',
   'Process: read_recent_sessions -> list_memories (avoid duplicates) -> add_memory for each new,',
   'durable memory (skip one-off/transient details; keep it concise).',
+  'DECLARE STRUCTURED CONSTRAINTS in `slots` whenever the memory is one (a budget, a bedroom',
+  'count, a property type, a pool requirement). The prose is for a human to read and is NOT',
+  'parsed, so a constraint that only exists in the prose never reaches a search.',
   'CONSOLIDATE when useful: if several episodics point to one durable preference, add_memory a',
   'semantic (list them in mergedFrom) and forget_memory the redundant episodics.',
   'RESOLVE CONFLICTS explicitly: after list_memories, compare EACH stored memory against the',
@@ -102,6 +121,7 @@ function makeExecutor(userId: string, runStore: AgentRunStore, since: number) {
         description: String(args.description),
         type: (args.type === 'episodic' ? 'episodic' : 'semantic') as MemoryType,
         content: String(args.content),
+        slots: args.slots && typeof args.slots === 'object' ? args.slots as Record<string, never> : undefined,
         salience: typeof args.salience === 'number' ? args.salience : undefined,
         mergedFrom: Array.isArray(args.mergedFrom) ? args.mergedFrom.filter((x): x is string => typeof x === 'string') : undefined,
       });

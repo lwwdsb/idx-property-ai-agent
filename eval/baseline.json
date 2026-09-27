@@ -186,6 +186,12 @@
       "value": 1,
       "direction": "up",
       "n": 7
+    },
+    "memory_consolidate.metrics.json:pass_rate": {
+      "label": "memory consolidation quality",
+      "value": 1,
+      "direction": "up",
+      "n": 5
     }
   }
 }

@@ -60,6 +60,7 @@ GATED = [
     ("memory_dynamics.metrics.json", "pass_rate", "memory dynamics pass rate", "up", "n"),
     ("memory_utility.metrics.json", "pass_rate", "memory utility pass rate", "up", "n"),
     ("memory_utility.metrics.json", "utility_rate", "memory changed the outcome (positives)", "up", "n"),
+    ("memory_consolidate.metrics.json", "pass_rate", "memory consolidation quality", "up", "n"),
 ]
 # Invariants: (file, dotted path, required value, why it is absolute)
 HARD = [
@@ -76,6 +77,9 @@ HARD = [
     # A memory system that changes everything is as broken as one that changes nothing: the
     # negative controls are the half that catches pollution.
     ("memory_utility.metrics.json", "controls_held", True, "memory must NOT change the outcome where it should not"),
+    # A second pass must add nothing: the watermark is what stops consolidation re-reading and
+    # re-minting the same memories forever.
+    ("memory_consolidate.metrics.json", "idempotent_all", True, "a repeat consolidation pass must add nothing"),
 ]
 
 

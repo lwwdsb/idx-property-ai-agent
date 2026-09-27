@@ -77,7 +77,8 @@ for (const c of cases) {
   } else {
     let p = freshProfile('eval');
     for (const m of c.memories) {
-      p = addMemory(p, { name: m.name, description: m.description, type: m.type, content: m.content, salience: m.salience });
+      p = addMemory(p, { name: m.name, description: m.description, type: m.type, content: m.content,
+        salience: m.salience, slots: m.slots });
     }
     const picked = await selectMemories(p.memories, c.task, llm);
     const registry = buildRegistry(pythonBridge, new InMemoryDraftStore());

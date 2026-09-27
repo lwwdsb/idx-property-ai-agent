@@ -63,6 +63,7 @@ eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant
 	npx tsx eval/runners/evalMemorySelect.ts
 	$(PY) eval/runners/report_memory_select.py
 	npx tsx eval/runners/evalMemoryUtility.ts
+	npx tsx eval/runners/evalMemoryConsolidate.ts
 	$(PY) eval/runners/eval_retrieval.py
 	$(PY) eval/runners/eval_rag.py
 	$(PY) eval/runners/tune_retrieval.py

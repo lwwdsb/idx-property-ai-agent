@@ -1,12 +1,12 @@
 {
-  "accepted_at": "2026-09-27 02:16:41 UTC",
+  "accepted_at": "2026-09-27 06:44:06 UTC",
   "provenance": {
-    "at": "2026-09-27 02:16:41 UTC",
+    "at": "2026-09-27 06:44:06 UTC",
     "git": {
-      "commit": "116aa823be51",
+      "commit": "b3f74084bd55",
       "branch": "tuning-loop",
-      "dirty": true,
-      "dirty_files": 2
+      "dirty": false,
+      "dirty_files": 0
     },
     "tuning": {
       "path": "config/tuning.json",
@@ -69,8 +69,8 @@
         "lines": 44
       },
       "mode_retrieval_gen.jsonl": {
-        "sha256": "c22a0e4c1730bb82",
-        "lines": 103
+        "sha256": "3143795221b4378a",
+        "lines": 171
       },
       "parse.jsonl": {
         "sha256": "1e5733ff589565d8",
@@ -129,13 +129,13 @@
     },
     "intent_parse.metrics.json:parse.escalation_accuracy": {
       "label": "parse escalation accuracy",
-      "value": 0.9,
+      "value": 0.925,
       "direction": "up",
       "n": 40
     },
     "intent_parse.metrics.json:parse.regex_slot_f1_non_escalate": {
       "label": "parse slot F1 (regex)",
-      "value": 0.9643,
+      "value": 0.9704,
       "direction": "up",
       "n": 28
     },

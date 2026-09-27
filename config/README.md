@@ -33,8 +33,8 @@ IDX_TUNING=/abs/path/candidate.json uvicorn service:app --port 8099   # 从 retr
 | 键 | 当前值 | 原来位置 | 说明 / 来源 |
 |---|---|---|---|
 | `rerankCoarse` | 20 | `service.py` | 交给 cross-encoder 的粗排池大小。70 条分级集上扫出：20 带来 +0.14 nDCG@10，30 只有 +0.06；超过 ~50 精排转负（从太深的位置提上来的是噪声） |
-| `prefetch` | 30 | `search.py` | RRF 融合前每条路径（dense / bm25）各取多深。与 `rerankCoarse` 是**两个独立旋钮** |
-| `rerankEnabled` | true | `service.py` | `/search` 是否开精排。代价：p50 从 ~10ms 涨到 ~158ms，换 P@5 0.76→0.92 |
+| `prefetch` | 30 | `search.py` | RRF 融合前每条路径（dense / bm25）各取多深。⚠️ **2026-09-27 实测是个死旋钮**：coarse=20 下 prefetch 20/30/50 在三个评测通道上给出 **+0/−0 完全相同**的结果——更深的融合不改变进 cross-encoder 的那 20 条。已从 `loop_retrieval.py` 的实际扫描价值里除名，留在文件里只为集中管理 |
+| `rerankEnabled` | true | `service.py` | `/search` 是否开精排。代价：p50 从 ~10ms 涨到 **~86ms**（2026-09-27 实测；池 30→20 后的值，原记 158ms），换 P@5 0.76→0.92 |
 | `topK` | 5 | `service.py` | `SearchReq.k` 默认值 |
 
 ### shared.search / shared.rag / shared.facts
@@ -52,7 +52,7 @@ IDX_TUNING=/abs/path/candidate.json uvicorn service:app --port 8099   # 从 retr
 | 键 | 当前值 | 说明 / 来源 |
 |---|---|---|
 | `embedThreshold` | 0.58 | 从 0.55 扫上来的。取的是「**域内误伤 ≤5% 约束下**」的最优，不是 F1 最优——F1 最优 0.74 会误伤 36% 域内查询 |
-| `embedMargin` | 0.05 | top1−top2 的最小差距。拍的保守值 + 二维扫描（score × margin）验证在安全区。这两个参数把域外拒识从 17% 提到 62.9%、macro-F1 0.63→0.80 |
+| `embedMargin` | 0.05 | top1−top2 的最小差距。拍的保守值 + 二维扫描（score × margin）验证在安全区。这两个参数把域外拒识从 17% 提到 62.9%、macro-F1 0.63→0.80。⚠️ **2026-09-27：这两个旋钮已经调到头了** —— 861 点网格全部满足 5% 约束（域内只有 2/83 条真正走到 embedding 门，约束已失效），246 点并列最优。后续的域外拒识 0.63→0.80 来自**收紧正则**而非动这两个数 |
 
 ### auto.loop / auto.memory
 

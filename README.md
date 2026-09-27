@@ -61,6 +61,11 @@ the internship FTP `sql/` folder:
 | `california_sold` | 87,157 sold transactions (CA), 46 fields | Historical comps & analytics |
 | `rets_openhouse` | 4,282 open-house events | Open-house lookups |
 
+> The **vector index holds 52,763** of those listings, not 53,122: listings whose remark is
+> empty or under 40 characters are excluded, because a listing with no descriptive text cannot
+> answer a semantic query. They remain fully searchable through the structured MySQL path,
+> where the match is on fields rather than on text.
+
 **Join pattern:** `CAST(rets_property.L_ListingID AS UNSIGNED) = california_sold.ListingKey`,
 or match on city + postal code for market-level analysis. A **field dictionary**
 (`schema/columns.ts`) maps semantic names to the cryptic physical columns

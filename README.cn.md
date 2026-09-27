@@ -55,6 +55,9 @@ WhatsApp  ⇄  OpenClaw 网关  ⇄  agent(DeepSeek —— 薄前台)
 | `california_sold` | 87,157 条成交记录(加州),46 个字段 | 历史 comp 与分析 |
 | `rets_openhouse` | 4,282 条开放日活动 | 开放日查询 |
 
+> **向量索引里是 52,763 条**而不是 53,122：remark 为空或不足 40 字的房源被排除——没有描述文本的房源
+> 无法回答语义查询。它们在结构化 MySQL 路径上照常可搜（那边匹配的是字段而不是文本）。
+
 **关联方式:** `CAST(rets_property.L_ListingID AS UNSIGNED) = california_sold.ListingKey`,
 或按 城市 + 邮编 做市场级分析。一份**字段字典**(`schema/columns.ts`)把语义名映射到晦涩的
 物理列(如 `beds → L_Keyword2`),作为单一事实来源。

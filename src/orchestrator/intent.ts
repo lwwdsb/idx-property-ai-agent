@@ -46,6 +46,30 @@ export const KNOWLEDGE_RE = /\b(what is|what's|what does|how (is|are|do)|explain
 export const EMAIL_RE = /\be-?mail\b|发邮件|发送邮件|邮件发给|[^@\s]+@[^@\s]+\.[^@\s]+/i;
 const VALUE_RE = /\b(priced? (fair|right|well)|worth it|good deal|overpriced|underpriced|fair price|is it worth)\b|贵不贵|值不值|合理吗|价格合理|划算/i;
 
+/**
+ * Domain anchor for the two rules that match on a bare INTENT VERB rather than on
+ * real-estate vocabulary. KNOWLEDGE_RE fires on any "what is / how do" question and
+ * RECOMMEND_RE on a bare "recommend / 推荐", so without an anchor they swallowed
+ * "what's the capital of France", "how are you doing today", "recommend a good restaurant
+ * near me", "给我推荐一部电影" — 7 of the 8 out-of-domain queries that the rule layer was
+ * routing before the embedding OOD gate ever saw them, which is what capped OOD rejection
+ * at 0.771 no matter how the gate was tuned.
+ *
+ * REF counts as an anchor on purpose: "more like #2", "跟第一个类似的", "similar to the
+ * first" carry no property noun, but a reference to previously shown listings IS a
+ * real-estate signal.
+ *
+ * Deliberately NOT applied to `cityAgnostic` below: that flag only decides whether to spend
+ * an LLM parse, and making out-of-domain messages non-city-agnostic would buy an LLM call
+ * plus the risk of a hallucinated filter for no benefit — they fall to the gate either way.
+ */
+const DOMAIN_RE = /\b(?:homes?|houses?|propert(?:y|ies)|listings?|condos?|townhouses?|apartments?|real ?estate|mls|dom|days on market|sold[- ]to[- ]list|comps?|contingen(?:t|cy|cies)|pending|escrow|price per|per sq\.?\s?ft|square (?:foot|feet)|sqft|bed(?:room)?s?|bath(?:room)?s?|yard|pool|garage|zip|neighborhood|school district|hoa)\b|房|套|户|居室|卧|卫|平米|平尺|学区|房源|房产|成交|挂牌|字段|列名/i;
+const REF_RE = /#\s*\d+|\b(?:first|second|third|fourth|fifth|1st|2nd|3rd)\b|\bthat one\b|\bthis one\b|第\s*[一二两三四五六七八九十\d]|这套|那套|这个|刚才|\b\d{6,}\b/i;
+/** True when the message mentions the domain at all (property vocabulary or a listing reference). */
+export function hasDomainAnchor(message: string): boolean {
+  return DOMAIN_RE.test(message) || REF_RE.test(message);
+}
+
 export async function classifyIntent(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
   // Cheap regex-only parse first (no LLM). City-agnostic intents (email / knowledge /
   // recommend) are decided from this alone — they don't need a city, so we never pay for
@@ -72,7 +96,7 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   }
   // knowledge (definitional, no city) — checked before market so "what is days on
   // MARKET" isn't misread as a market-stats query by the substring "market".
-  if (KNOWLEDGE_RE.test(message) && !searchable) {
+  if (KNOWLEDGE_RE.test(message) && !searchable && hasDomainAnchor(message)) {
     return { intent: 'knowledge', confidence: 'high', filter: parsed.filter, via: 'rule' };
   }
   // explicit market ask
@@ -82,7 +106,7 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
              clarification: 'Which city do you want market stats for?' };
   }
   // recommendation
-  if (RECOMMEND_RE.test(message)) {
+  if (RECOMMEND_RE.test(message) && hasDomainAnchor(message)) {
     return { intent: 'recommend', confidence: 'high', filter: parsed.filter, via: 'rule' };
   }
   // plain search

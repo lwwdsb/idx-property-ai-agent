@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 
 from common import COLLECTION, get_dense, load_env
-from tuning import RERANK_COARSE, RERANK_ENABLED, SEARCH_TOP_K
+from tuning import PREFETCH, RERANK_COARSE, RERANK_ENABLED, SEARCH_TOP_K
 from rag import RagIndex, answer as rag_answer
 from recommend import validate_price, recommend as do_recommend, format_reco
 from search import hybrid_search, build_filter
@@ -206,6 +206,13 @@ class SearchReq(BaseModel):
     ptype: str | None = None        # physical L_Type_ value (e.g. "Condominium")
     k: int = SEARCH_TOP_K
     rerank: bool = RERANK_ENABLED   # coarse pool -> cross-encoder rerank -> top-k
+    # Sweep overrides. Absent = use the checked-in config, so production behaviour is
+    # unchanged. They exist so a tuning loop can evaluate candidates IN ONE PROCESS: the
+    # alternative is restarting the service per candidate, which adds warm-up variance to
+    # exactly the measurement the sweep is trying to make. Bounded, because an unbounded
+    # coarse pool would be a cheap way to make the service do arbitrary work.
+    coarse: int | None = None       # override RERANK_COARSE (cross-encoder input size)
+    prefetch: int | None = None     # override per-path depth before RRF fusion
 
 
 @app.post("/search")
@@ -216,8 +223,11 @@ def search(req: SearchReq):
     try:
         flt = build_filter(req.city, req.max_price, req.min_price, req.min_beds, req.pool, req.ptype)
         reranker = STATE.get("reranker")
+        n_coarse = min(200, max(req.k, req.coarse)) if req.coarse else RERANK_COARSE
+        n_prefetch = min(200, max(1, req.prefetch)) if req.prefetch else PREFETCH
         if req.rerank and reranker is not None:
-            coarse = hybrid_search(req.text, flt, k=max(RERANK_COARSE, req.k), mode="hybrid")
+            coarse = hybrid_search(req.text, flt, k=max(n_coarse, req.k), mode="hybrid",
+                                   prefetch=n_prefetch)
             try:
                 texts = _remarks([int(p.payload["listing_id"]) for p in coarse])
                 # Dedupe the COARSE pool, so the cross-encoder never spends a slot on a copy
@@ -232,7 +242,8 @@ def search(req: SearchReq):
                 return {"results": [{"score": p.score, **p.payload} for p in pts]}
         # No rerank: remarks were never fetched, so only the address+price rule can apply.
         # Over-fetch first, since dedupe can only shrink the list.
-        pts = _dedupe(hybrid_search(req.text, flt, k=req.k * 2, mode="hybrid"))[:req.k]
+        pts = _dedupe(hybrid_search(req.text, flt, k=req.k * 2, mode="hybrid",
+                                    prefetch=n_prefetch))[:req.k]
         return {"results": [{"score": p.score, **p.payload} for p in pts]}
     except Exception as e:  # Qdrant down — caller degrades to MySQL
         return {"error": f"semantic search unavailable: {e}", "results": []}

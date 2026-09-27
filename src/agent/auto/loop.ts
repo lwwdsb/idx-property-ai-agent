@@ -160,6 +160,7 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
       const sig = `${call.name}:${JSON.stringify(call.arguments)}`;
       const count = perTool.get(call.name) ?? 0;
       let observation: string;
+      let effective: Record<string, unknown> | undefined;
       if (seen.has(sig)) {
         loopGuards++;
         observation = `error: you already made this exact call to "${call.name}". `
@@ -183,11 +184,13 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
         perTool.set(call.name, count + 1);
         const res = await executeTool(registry, call.name, call.arguments, { userId, llm, memConstraints: mem.constraints });
         observation = res.observation;
+        effective = res.effectiveFilter as Record<string, unknown> | undefined;
         if (observation.startsWith('error')) toolErrors++;
         recordStep(mem, call.name, call.arguments, observation);
         if (res.draftId !== undefined) pendingDraft = res.draftId;   // outbound -> HITL interrupt
       }
-      trace.push({ step: state.step, tool: call.name, args: call.arguments, observation: observation.slice(0, 500) });
+      trace.push({ step: state.step, tool: call.name, args: call.arguments,
+                   effectiveFilter: effective, observation: observation.slice(0, 500) });
       messages.push({ role: 'tool', tool_call_id: call.id, content: observation });
     }
 

@@ -73,6 +73,14 @@ function priceWithDirection(q: string): { maxPrice?: number; minPrice?: number }
       out.maxPrice = parseMoney(m[2]!);
     }
   }
+  // A Chinese BUDGET phrase is a ceiling even without 以下/以内: "预算 150 万", "上限 200 万",
+  // "不超过 300 万". Checked LAST, only when no direction was found, because "预算 300 万以上"
+  // is a MINIMUM and must not be caught here — the min patterns above have already claimed it.
+  if (out.maxPrice === undefined && out.minPrice === undefined) {
+    if ((m = q.match(new RegExp(String.raw`(?:预算|上限|天花板|封顶|不超过|最多|最高)[^\d$]{0,6}(${MONEY})`, 'i')))) {
+      out.maxPrice = parseMoney(m[1]!);
+    }
+  }
   return out;
 }
 

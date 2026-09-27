@@ -75,7 +75,15 @@ export function findTools(registry: SkillRegistry, query: string): ToolSpec[] {
 export interface ToolRunCtx { userId: string; llm?: LLMClient; memConstraints?: SearchFilter; }
 /** ALWAYS resolves; `draftId` is set when an email tool produced a pending draft
  * (the loop's HITL interrupt point). Errors come back as an observation, never a throw. */
-export interface ToolResult { observation: string; draftId?: number; }
+export interface ToolResult {
+  observation: string;
+  draftId?: number;
+  /** The filter that was ACTUALLY executed — the LLM's args merged over the accumulated slot
+   * memory (which is itself seeded from facts + memory-derived slots). The trace used to record
+   * only `call.arguments`, i.e. what the model ASKED for, so it could not answer "which filter
+   * actually ran" — and a constraint that arrives via the seed was invisible in the trace. */
+  effectiveFilter?: SearchFilter;
+}
 
 export async function executeTool(
   registry: SkillRegistry,
@@ -95,10 +103,11 @@ export async function executeTool(
     const argFilter = sanitizeFilter(args) as FilterPatch;
     const filter = ctx.memConstraints ? mergeFilter(ctx.memConstraints, argFilter) : (argFilter as SearchFilter);
     const r = await skill.run({ userId: ctx.userId, message: query, filter, llm: ctx.llm, args });
+    const effectiveFilter = filter;
     // email returns the created draft as `data`; surface its id so the loop can suspend for HITL.
     const d = r.data as { id?: unknown } | undefined;
     const draftId = name === 'email' && d && typeof d.id === 'number' ? d.id : undefined;
-    return { observation: r.reply, draftId };
+    return { observation: r.reply, draftId, effectiveFilter };
   } catch (e) {
     return { observation: `error running ${name}: ${String(e)}` };
   }

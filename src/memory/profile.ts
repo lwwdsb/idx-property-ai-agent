@@ -26,6 +26,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { SearchFilter } from '../search/filters.js';
+import { normalizeQuery } from '../search/normalize.js';
+import { regexParse } from '../search/regexParse.js';
 import type { LLMClient, ChatMessage } from '../llm/client.js';
 import { FACT_CONFIDENCE_THRESHOLD, SELECT_SEMANTIC, SELECT_EPISODIC } from '../tuning.js';
 
@@ -336,6 +338,73 @@ export function compactMemories(profile: UserProfile, opts: CompactOptions = {})
     profile.updated = today();
   }
   return { removed };
+}
+
+/**
+ * Slots a SEMANTIC memory is allowed to contribute to the seed filter.
+ *
+ * `city` and `proximity` are deliberately absent. The city is the highest-consequence slot —
+ * pinning the wrong one silently changes every result — and the FACTS layer already learns it
+ * behind a confidence gate that needs the same value about three times. A single remembered
+ * sentence should not be able to do in one step what the facts layer deliberately makes slow.
+ */
+const MEMORY_SLOTS = ['maxPrice', 'minPrice', 'beds', 'baths', 'propertyType', 'pool', 'minSqft'] as const;
+
+/**
+ * Structured constraints parsed out of the SELECTED semantic memories, so a remembered
+ * preference that maps onto a slot travels the DETERMINISTIC channel.
+ *
+ * Why this exists: `seedFilter` used to come only from facts, while a semantic memory reached the
+ * agent purely as prose inside profileHint — leaving it to the model whether to turn it into a
+ * tool argument. Measured (memory_utility.jsonl): it translated "只看独栋" into propertyType and
+ * silently dropped "预算天花板 150 万", producing tool args identical to the no-memory arm. A
+ * constraint that maps onto a slot should not depend on the model noticing it.
+ *
+ NOT GATED ON SELECTION, and that is a deliberate reversal. Passing only the SELECTED memories
+ * was the first design, and it failed for a measured reason: asked whether a remembered budget
+ * ceiling was relevant to "在 Tustin 找三居", the selector answered NOTHING AT ALL, so the
+ * constraint never reached the filter. A structured constraint is not a "maybe relevant fact" —
+ * it is a filter the user already stated once, and it applies to every search the same way a
+ * FACT does, which is also why facts are injected without consulting the selector.
+ *
+ * Staleness is handled downstream rather than here: executeTool merges the model's own args OVER
+ * these seeded constraints, so a budget stated this turn always beats a remembered one. The
+ * selector still governs the PROSE hint — what the model reads — while structured slots bypass it.
+ *
+ * SEMANTIC ONLY, though. An episodic memory records what HAPPENED — "看中过 Canterbury 那套 3 居
+ * 120 万的" describes a past listing, not a current requirement, and seeding from it would quietly
+ * turn a past viewing into a filter.
+ *
+ * Parsing is regex-only (no LLM), and facts still win on any field both produce.
+ */
+export function memoryDerivedFilter(memories: MemoryEntry[]): Partial<SearchFilter> {
+  const out: Record<string, unknown> = {};
+  for (const m of memories) {
+    if (m.type !== 'semantic') continue;
+    const parsed = regexParse(normalizeQuery(m.content)) as Record<string, unknown>;
+    for (const k of MEMORY_SLOTS) {
+      if (out[k] === undefined && parsed[k] !== undefined) out[k] = parsed[k];
+    }
+  }
+  return out as Partial<SearchFilter>;
+}
+
+/**
+ * The auto agent's seed filter: memory-derived slots with FACTS ON TOP.
+ *
+ * Exported as one function because the eval runner previously rebuilt this expression itself and
+ * therefore kept measuring the OLD wiring after production changed — the fourth time in this
+ * project that a harness sent something production does not. Anything that both production and a
+ * runner need to agree on belongs in one place, like the shared metrics library and the grounding
+ * gate.
+ *
+ * Facts win on any field both produce: both are last-resort defaults, but a fact passed a
+ * repetition gate while a memory-derived slot is one parsed sentence.
+ */
+export function seedFilterFor(profile: UserProfile, _selected: MemoryEntry[] = []): Partial<SearchFilter> {
+  // memoryDerivedFilter takes ALL memories, not the selected ones — see its own note. `_selected`
+  // is kept in the signature so call sites read symmetrically with profileHint(profile, selected).
+  return { ...memoryDerivedFilter(profile.memories), ...preferredFilter(profile) };
 }
 
 // ── Injection helpers ──────────────────────────────────────────────────────────

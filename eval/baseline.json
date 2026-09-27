@@ -177,13 +177,13 @@
     },
     "memory_utility.metrics.json:pass_rate": {
       "label": "memory utility pass rate",
-      "value": 0.8571,
+      "value": 1,
       "direction": "up",
       "n": 7
     },
     "memory_utility.metrics.json:utility_rate": {
       "label": "memory changed the outcome (positives)",
-      "value": 0.75,
+      "value": 1,
       "direction": "up",
       "n": 7
     }

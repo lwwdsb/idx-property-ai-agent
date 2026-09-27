@@ -16,7 +16,7 @@ import type { DraftStore } from '../../email/drafts.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 import type { LLMClient } from '../../llm/client.js';
 import { runAgent, resumeAgentRun, retryAgentRun } from './loop.js';
-import { loadProfile, saveFacts, saveUsage, profileHint, preferredFilter, selectMemories, touchMemory, learnFromFilter } from '../../memory/profile.js';
+import { loadProfile, saveFacts, saveUsage, profileHint, seedFilterFor, selectMemories, touchMemory, learnFromFilter } from '../../memory/profile.js';
 import { parseQuery } from '../../search/parseQuery.js';
 import { isKnownCity } from '../../search/cityDictionary.js';
 import type { AgentRunStore, AgentRun } from './runStore.js';
@@ -113,7 +113,7 @@ export async function handleAgentMessage(
     if (selected.length) saveUsage(profile);
     const res = await runAgent(task, {
       userId, registry, llm, store: runStore, progressive: deps.progressive ?? true,
-      profileHint: profileHint(profile, selected), seedFilter: preferredFilter(profile),
+      profileHint: profileHint(profile, selected), seedFilter: seedFilterFor(profile, selected),
     });
     return res.reply;
   }

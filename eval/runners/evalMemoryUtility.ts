@@ -27,7 +27,7 @@
  *   npx tsx eval/runners/evalMemoryUtility.ts
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { freshProfile, learnFromFilter, preferredFilter, addMemory, profileHint, selectMemories } from '../../src/memory/profile.js';
+import { freshProfile, learnFromFilter, preferredFilter, addMemory, profileHint, seedFilterFor, selectMemories } from '../../src/memory/profile.js';
 import { mergeFilter, type SearchFilter } from '../../src/search/filters.js';
 import { runAgent } from '../../src/agent/auto/loop.js';
 import { InMemoryAgentRunStore } from '../../src/agent/auto/runStore.js';
@@ -45,10 +45,21 @@ const TODAY = new Date().toISOString().slice(0, 10);
 const has = (o: any, want: Record<string, unknown>) => Object.entries(want).every(([k, v]) => o?.[k] === v);
 const lacks = (o: any, keys: string[]) => keys.every((k) => o?.[k] === undefined);
 
-/** Union of every tool call's args across the trace — the remembered constraint may land on any step. */
-function argsOf(trace: Array<{ args?: Record<string, unknown> }>) {
+/**
+ * The EFFECTIVE filter across the trace, not the model's requested args.
+ *
+ * Asserting on `args` was wrong and hid the very bug this eval found: `args` is only what the
+ * model asked for, while a constraint seeded from memory is merged in inside executeTool and
+ * never appears there. So a memory could be working perfectly and still look like it changed
+ * nothing. `effectiveFilter` is what actually ran.
+ */
+function argsOf(trace: Array<{ args?: Record<string, unknown>; effectiveFilter?: Record<string, unknown> }>) {
   const out: Record<string, unknown> = {};
-  for (const s of trace) for (const [k, v] of Object.entries(s.args ?? {})) if (out[k] === undefined) out[k] = v;
+  for (const s of trace) {
+    for (const [k, v] of Object.entries(s.effectiveFilter ?? s.args ?? {})) {
+      if (out[k] === undefined) out[k] = v;
+    }
+  }
   return out;
 }
 
@@ -71,7 +82,9 @@ for (const c of cases) {
     const picked = await selectMemories(p.memories, c.task, llm);
     const registry = buildRegistry(pythonBridge, new InMemoryDraftStore());
     const common = { userId: 'eval-mem', registry, llm, store: new InMemoryAgentRunStore(), progressive: false, maxSteps: 4 };
-    const a = await runAgent(c.task, { ...common, profileHint: profileHint(p, picked), seedFilter: preferredFilter(p) });
+    // seedFilterFor is the SAME function production uses — rebuilding the expression here is how
+    // this runner kept measuring the old wiring after entry.ts changed.
+    const a = await runAgent(c.task, { ...common, profileHint: profileHint(p, picked), seedFilter: seedFilterFor(p, picked) });
     const b = await runAgent(c.task, { ...common });
     withObs = argsOf(a.trace);
     withoutObs = argsOf(b.trace);

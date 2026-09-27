@@ -19,6 +19,9 @@ export interface AgentTraceStep {
   step: number;
   tool?: string;
   args?: Record<string, unknown>;
+  /** The filter actually executed (args merged over slot memory). Distinct from `args`, which is
+   * only what the model requested — a constraint seeded from memory appears here and nowhere else. */
+  effectiveFilter?: Record<string, unknown>;
   observation?: string;
   thought?: string;
 }

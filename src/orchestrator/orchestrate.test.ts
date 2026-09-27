@@ -5,6 +5,7 @@
  *
  * Run: npm run test:orch
  */
+import '../testEnv.js';   // FIRST: deterministic env, independent of the developer's .env
 import assert from 'node:assert/strict';
 import { orchestrate } from './orchestrate.js';
 import { buildRegistry } from './skills.js';

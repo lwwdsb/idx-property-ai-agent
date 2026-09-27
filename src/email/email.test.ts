@@ -4,6 +4,7 @@
  * Non-negotiables: no unapproved send, gated authorization, batch cap, idempotent send.
  * Run: npm run test:email
  */
+import '../testEnv.js';   // FIRST: deterministic env, independent of the developer's .env
 import assert from 'node:assert/strict';
 import { config } from '../config.js';
 import { InMemoryDraftStore } from './drafts.js';

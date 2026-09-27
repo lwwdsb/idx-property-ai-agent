@@ -58,6 +58,17 @@ await check('memory: touchMemory bumps useCount', () => {
   touchMemory(p, 'ev1');
   assert.equal(p.memories[0]!.useCount, 1);
 });
+await check('memory: an EMPTY llm selection means "none", not "fall back to everything"', async () => {
+  let p = freshProfile('u');
+  p = addMemory(p, { name: 'a', description: 'd', type: 'semantic', content: 'c', salience: 0.9 });
+  p = addMemory(p, { name: 'b', description: 'd', type: 'semantic', content: 'c', salience: 0.8 });
+  const saysNone: any = { available: true, async chatWithTools() { return { content: '[]', toolCalls: [], raw: {} }; } };
+  assert.deepEqual((await selectMemories(p.memories, 'hello', saysNone)).map((m) => m.name), [],
+    'a valid "none" must inject nothing — otherwise a greeting drags the whole profile into the prompt');
+  const garbage: any = { available: true, async chatWithTools() { return { content: 'sorry, what?', toolCalls: [], raw: {} }; } };
+  assert.equal((await selectMemories(p.memories, 'hello', garbage)).length, 2,
+    'an UNPARSEABLE reply is a real failure and must still degrade to the deterministic rank');
+});
 await check('memory: selectMemories fallback ranks by salience (no LLM)', async () => {
   const p = freshProfile('u');
   addMemory(p, { name: 'hi', description: 'important', type: 'episodic', content: 'A', salience: 0.9 });

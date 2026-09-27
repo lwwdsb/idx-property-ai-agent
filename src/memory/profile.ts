@@ -235,11 +235,23 @@ function rank(m: MemoryEntry): number {
   return m.salience * (1 / (1 + freshness(m) / 30));
 }
 
-function jsonArray(text: string): number[] {
+/**
+ * Parse the selector's reply. Returns null when nothing could be parsed, and `[]` when the model
+ * validly answered "none" — the two must NOT collapse.
+ *
+ * They used to: this returned `[]` for a missing array, a throwing JSON.parse AND a genuine `[]`,
+ * and the caller then treated every empty result as a failure and fell back to ranking EVERY
+ * memory. So on a greeting or an out-of-domain request — where the correct answer is to inject
+ * nothing — the whole profile was injected instead. The prompt asks for "[] if none" and the code
+ * discarded that answer. Measured on the two empty-gold probes: precision 0.00 before, 1.00 after.
+ */
+function jsonArray(text: string): number[] | null {
   const m = text.match(/\[[\s\S]*?\]/);
-  if (!m) return [];
-  try { const a = JSON.parse(m[0]); return Array.isArray(a) ? a.map(Number).filter(Number.isFinite) : []; }
-  catch { return []; }
+  if (!m) return null;
+  try {
+    const a = JSON.parse(m[0]);
+    return Array.isArray(a) ? a.map(Number).filter(Number.isFinite) : null;
+  } catch { return null; }
 }
 
 export interface SelectLimits { semantic?: number; episodic?: number; }
@@ -282,8 +294,10 @@ export async function selectMemories(
       + 'episodic = a past event. Return a JSON array of the relevant indices (e.g. [0,2]); [] if none.' } as ChatMessage,
     { role: 'user', content: `Memories:\n${index}\n\nCurrent task: ${context}` } as ChatMessage,
   ], []);
-  const picked = jsonArray(turn.content).filter((i) => memories[i]).map((i) => memories[i]!);
-  return picked.length ? capPerType(picked) : byRank();
+  const idx = jsonArray(turn.content);
+  if (idx === null) return byRank();          // unparseable -> degrade to the deterministic rank
+  const picked = idx.filter((i) => memories[i]).map((i) => memories[i]!);
+  return capPerType(picked);                  // an EMPTY selection is a valid answer, not a failure
 }
 
 /** Delete a memory by name (used for consolidation: superseded/contradicted/redundant). */

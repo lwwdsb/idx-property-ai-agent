@@ -150,6 +150,24 @@
       "value": 1.0,
       "direction": "up",
       "n": 14
+    },
+    "memory_facts.metrics.json:pass_rate": {
+      "label": "memory facts pass rate",
+      "value": 1,
+      "direction": "up",
+      "n": 5
+    },
+    "memory_select.metrics.json:arms.llm.precision": {
+      "label": "memory injection precision",
+      "value": 0.9,
+      "direction": "up",
+      "n": 10
+    },
+    "memory_select.metrics.json:arms.llm.recall": {
+      "label": "memory injection recall",
+      "value": 0.7292,
+      "direction": "up",
+      "n": 10
     }
   }
 }

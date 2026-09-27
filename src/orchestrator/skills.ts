@@ -206,7 +206,14 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       name: 'recommend',
       description: 'Given a listing you like (by id/MLS), recommend similar homes with a price check.',
       async run(ctx) {
-        const id = extractId(ctx.message);
+        // An explicit id/MLS always wins; otherwise resolve a reference ("跟第一个类似的",
+        // "那套 Canterbury") against the listings we just showed this user. Without this,
+        // resolveListingRef was dead code and every reference-style request asked for an id.
+        let id = extractId(ctx.message);
+        if (id === undefined) {
+          const s = await defaultSessionStore.get(ctx.userId);
+          id = resolveListingRef(ctx.message, s?.lastResults);
+        }
         if (!id) {
           return { skill: 'recommend', reply: 'Which listing? Send its id / MLS number.' };
         }

@@ -25,7 +25,6 @@ THREE WAYS THIS REFUSES TO ACT, each for a different reason:
 """
 import argparse
 import json
-import math
 import os
 import subprocess
 import sys
@@ -34,6 +33,8 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from provenance import build as build_stamp                      # noqa: E402
 from report_intent_parse import _sweep_threshold, _read          # noqa: E402
+from stats import mcnemar_exact                                  # noqa: E402  (shared with
+#                                          score_pairwise.py — one implementation, no drift)
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 HIST = os.path.join(ROOT, "eval", "history")
@@ -69,17 +70,6 @@ def gate_decisions(preds, t, mg):
         hinge = p.get("topScore") is not None and (p.get("via") == "embedding" or p["pred"] == "unknown")
         out[p["id"]] = ((p["topSkill"] if accept(p) else "unknown") if hinge else p["pred"]) == "unknown"
     return out
-
-
-def mcnemar_exact(b, c):
-    """Two-sided exact binomial on the discordant pairs. b = candidate rejects & incumbent
-    does not, c = the reverse; concordant pairs carry no information about the difference."""
-    n = b + c
-    if n == 0:
-        return 1.0
-    k = min(b, c)
-    tail = sum(math.comb(n, i) for i in range(0, k + 1)) / (2 ** n)
-    return min(1.0, 2 * tail)
 
 
 def one_pass(preds, cur_t, cur_mg):

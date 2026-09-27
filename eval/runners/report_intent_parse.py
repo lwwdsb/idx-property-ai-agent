@@ -45,33 +45,59 @@ def _sweep_threshold(preds):
     Score by overall macro-F1 over ALL samples. Returns best t + curve."""
     score_cand = [round(x / 100, 2) for x in range(35, 76)]   # 0.35 .. 0.75
     margin_cand = [round(x / 100, 2) for x in range(0, 21, 1)]  # 0.00 .. 0.20
-    ind = [p for p in preds if "unknown" not in p["gold"] and p.get("topScore") is not None]
-    ood = [p for p in preds if "unknown" in p["gold"] and p.get("topScore") is not None]
+    ind = [p for p in preds if "unknown" not in p["gold"]]
+    ood = [p for p in preds if "unknown" in p["gold"]]
 
     def accept(p, t, mg):
         """Would the embedding guess be accepted (routed) at (score>=t AND margin>=mg)?"""
         ts, m, tk = p.get("topScore"), p.get("topMargin"), p.get("topSkill")
         return ts is not None and ts >= t and (m if m is not None else 1.0) >= mg and tk in ROUTABLE
 
+    def final_pred(p, t, mg):
+        """What the PIPELINE would answer at (t, mg) — the rules decide first, and only a
+        sample that actually falls through to the embedding layer is re-decided by the gate.
+
+        All three metrics below are computed from this, on one population. They previously
+        were not: in_domain_wrong_reject / ood_reject asked "would the GATE reject this",
+        over every sample, while macro_f1 asked what the pipeline would answer. Since the
+        regex layer decides ~98% of in-domain traffic before the gate is consulted, the old
+        in_domain_wrong_reject charged the threshold for rejecting samples the rules had
+        already routed — enough to put production's own 0.58/0.05 in VIOLATION of the 5%
+        constraint (0.4578) and hand the recommendation to a point with barely half its OOD
+        rejection. Validation anchor: at 0.58/0.05 this definition reproduces the
+        independently measured ood_reject_rate (0.6571) exactly."""
+        hinge = p.get("topScore") is not None and (p.get("via") == "embedding" or p["pred"] == "unknown")
+        return (p["topSkill"] if accept(p, t, mg) else "unknown") if hinge else p["pred"]
+
     results = []
     for t in score_cand:
         for mg in margin_cand:
-            pairs = []
-            for p in preds:
-                gold = p["gold"][0]
-                hinge = p.get("topScore") is not None and (p.get("via") == "embedding" or p["pred"] == "unknown")
-                pred = (p["topSkill"] if accept(p, t, mg) else "unknown") if hinge else p["pred"]
-                pairs.append((gold, pred))
+            pairs = [(p["gold"][0], final_pred(p, t, mg)) for p in preds]
             f1 = classification_report(pairs)["macro_f1"]
-            in_wrong = sum(1 for p in ind if not accept(p, t, mg)) / len(ind) if ind else 0
-            ood_rej = sum(1 for p in ood if not accept(p, t, mg)) / len(ood) if ood else 0
+            in_wrong = sum(1 for p in ind if final_pred(p, t, mg) == "unknown") / len(ind) if ind else 0
+            ood_rej = sum(1 for p in ood if final_pred(p, t, mg) == "unknown") / len(ood) if ood else 0
             results.append({"t": t, "margin": mg, "macro_f1": round(f1, 4),
                             "in_domain_wrong_reject": round(in_wrong, 4), "ood_reject": round(ood_rej, 4)})
 
     f1_opt = max(results, key=lambda r: r["macro_f1"])
     ok = [r for r in results if r["in_domain_wrong_reject"] <= 0.05]
     rec = max(ok, key=lambda r: r["ood_reject"]) if ok else f1_opt   # maximize OOD reject under safety
-    return {"f1_optimal": f1_opt, "recommended": rec, "constraint": "in-domain wrong-reject <= 5%"}
+
+    # A single "recommended" point is misleading when the objective is FLAT: report how wide
+    # the optimum is, and how binding the constraint is. Picking one point off a broad
+    # plateau with max() is picking arbitrarily, which is how an auto-tuner drifts.
+    tied = [r for r in ok if r["ood_reject"] == rec["ood_reject"]]
+    return {"f1_optimal": f1_opt, "recommended": rec,
+            "constraint": "in-domain wrong-reject <= 5%",
+            "n_grid": len(results), "n_feasible": len(ok),
+            "constraint_binding": len(ok) < len(results),
+            "n_tied_at_optimum": len(tied),
+            "tie_span": {"t": [min(r["t"] for r in tied), max(r["t"] for r in tied)],
+                         "margin": [min(r["margin"] for r in tied), max(r["margin"] for r in tied)]},
+            "in_domain_reachable": sum(
+                1 for p in ind
+                if p.get("topScore") is not None and (p.get("via") == "embedding" or p["pred"] == "unknown")),
+            "n_in_domain": len(ind), "n_ood": len(ood)}
 
 
 def intent_metrics():

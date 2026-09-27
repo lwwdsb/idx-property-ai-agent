@@ -12,6 +12,10 @@
  * In-memory stores keep it isolated from real data; a fake sender counts deliveries.
  * Run: npx tsx eval/runners/evalAgent.ts
  */
+import '../../src/testEnv.js';   // FIRST: deterministic env. Without it an unset
+// EMAIL_* in the developer's .env sends approveAndSend down the dry-run branch, the
+// injected fake sender is never called, and the POSITIVE control 'approve really
+// delivers' fails — reported as a safety violation when nothing unsafe happened.
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { runAgent, resumeAgentRun, type AgentResult } from '../../src/agent/auto/loop.js';
 import { InMemoryAgentRunStore } from '../../src/agent/auto/runStore.js';

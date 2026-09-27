@@ -34,6 +34,13 @@ def token():
 TOK = token()
 
 
+# Omit the header entirely when no token is configured. Sending `Bearer ` with an empty value
+# is not "no auth" — httpx rejects it as an illegal header value, which took the whole latency
+# benchmark down. The TS callers (idxServer.ts, openclaw-plugin) already build it conditionally;
+# this one did not, so a missing ORCH_TOKEN broke the benchmark instead of the request.
+AUTH = {"Authorization": f"Bearer {TOK}"} if TOK else {}
+
+
 def pct(xs, p):
     xs = sorted(xs)
     if not xs:
@@ -79,7 +86,7 @@ def main():
     def orchestrate_search():
         _uid[0] += 1
         client.post(f"{ORCH}/orchestrate",
-                    headers={"Authorization": f"Bearer {TOK}"},
+                    headers=AUTH,
                     json={"userId": f"bench-{_uid[0]}", "message": "在 Irvine 找 3 居室 200万以下"})
 
     print(f"latency benchmark (sequential, n={N}):\n")
@@ -97,7 +104,7 @@ def main():
     def one(i):
         t = time.perf_counter()
         client.post(f"{ORCH}/orchestrate",
-                    headers={"Authorization": f"Bearer {TOK}"},
+                    headers=AUTH,
                     json={"userId": f"conc-{base}-{i}", "message": "Irvine 行情怎么样"})
         return time.perf_counter() - t
 

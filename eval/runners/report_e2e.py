@@ -38,8 +38,13 @@ def main():
         "safety_ok": meta.get("anySent") == 0,
         "per_assertion": {k: {"passed": d[0], "total": d[1]} for k, d in kinds.items()},
         "live": {"llm": meta.get("llmLive"), "classify": meta.get("classifyLive")},
+        # .get on got: a turn that clarifies or rejects a city returns BEFORE any skill runs,
+        # so `skill` is absent on those rows. Indexing it directly took the whole report down
+        # with a KeyError the first time a clarify-path case failed — i.e. exactly when the
+        # failure list was the thing worth reading.
         "failures": [{"input": p["input"], "note": p["note"], "expect": p["expect"],
-                      "got_intent": p["got"]["intent"], "got_skill": p["got"]["skill"],
+                      "got_intent": p["got"].get("intent"), "got_skill": p["got"].get("skill"),
+                      "got_reply": (p["got"].get("reply") or "")[:200],
                       "checks": p["checks"]} for p in preds if not p["pass"]],
     }
 

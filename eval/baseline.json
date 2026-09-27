@@ -1,0 +1,155 @@
+{
+  "accepted_at": "2026-09-27 02:16:41 UTC",
+  "provenance": {
+    "at": "2026-09-27 02:16:41 UTC",
+    "git": {
+      "commit": "116aa823be51",
+      "branch": "tuning-loop",
+      "dirty": true,
+      "dirty_files": 2
+    },
+    "tuning": {
+      "path": "config/tuning.json",
+      "sha256": "55cdec9346fbcb6f",
+      "config": {
+        "version": 1,
+        "shared": {
+          "retrieval": {
+            "rerankCoarse": 20,
+            "prefetch": 30,
+            "rerankEnabled": true,
+            "topK": 5
+          },
+          "search": {
+            "maxResults": 50,
+            "tooMany": 200
+          },
+          "rag": {
+            "chunkSize": 600,
+            "chunkOverlap": 100,
+            "topK": 3
+          },
+          "facts": {
+            "confidenceThreshold": 0.5
+          }
+        },
+        "deterministic": {
+          "intent": {
+            "embedThreshold": 0.58,
+            "embedMargin": 0.05
+          }
+        },
+        "auto": {
+          "loop": {
+            "maxSteps": 8,
+            "maxPerTool": 3
+          },
+          "memory": {
+            "selectSemantic": 5,
+            "selectEpisodic": 3
+          }
+        }
+      }
+    },
+    "datasets": {
+      "agent.jsonl": {
+        "sha256": "aad3641f1c4fb80f",
+        "lines": 14
+      },
+      "e2e.jsonl": {
+        "sha256": "97a7723ba4cb3db5",
+        "lines": 25
+      },
+      "intent.jsonl": {
+        "sha256": "e34d0241e8a0543d",
+        "lines": 118
+      },
+      "mode_retrieval.jsonl": {
+        "sha256": "f0b3ed16a7c52e25",
+        "lines": 44
+      },
+      "mode_retrieval_gen.jsonl": {
+        "sha256": "c22a0e4c1730bb82",
+        "lines": 103
+      },
+      "parse.jsonl": {
+        "sha256": "1e5733ff589565d8",
+        "lines": 40
+      },
+      "rag.jsonl": {
+        "sha256": "e0f9e18c0865ef67",
+        "lines": 30
+      },
+      "retrieval.jsonl": {
+        "sha256": "912e949c5dd49b51",
+        "lines": 24
+      },
+      "retrieval_large.jsonl": {
+        "sha256": "201a0ebe18c1a824",
+        "lines": 70
+      },
+      "retrieval_queries.txt": {
+        "sha256": "0af1c60b32c31a33",
+        "lines": 78
+      }
+    },
+    "seed": 7,
+    "env": {
+      "LLM_API_KEY": true,
+      "EMAIL_PASSWORD": false,
+      "ORCH_TOKEN": false,
+      "GOOGLE_MAPS_API_KEY": false
+    },
+    "services": {
+      "retrieval": true
+    },
+    "versions": {
+      "python": "3.12.12",
+      "node": "v24.19.0"
+    }
+  },
+  "metrics": {
+    "intent_parse.metrics.json:intent.accuracy_in_set": {
+      "label": "intent accuracy (in gold set)",
+      "value": 0.8983,
+      "direction": "up",
+      "n": 118
+    },
+    "intent_parse.metrics.json:intent.macro_f1": {
+      "label": "intent macro-F1",
+      "value": 0.8384,
+      "direction": "up",
+      "n": 118
+    },
+    "intent_parse.metrics.json:intent.ood_reject_rate": {
+      "label": "OOD rejection",
+      "value": 0.8,
+      "direction": "up",
+      "n": 35
+    },
+    "intent_parse.metrics.json:parse.escalation_accuracy": {
+      "label": "parse escalation accuracy",
+      "value": 0.9,
+      "direction": "up",
+      "n": 40
+    },
+    "intent_parse.metrics.json:parse.regex_slot_f1_non_escalate": {
+      "label": "parse slot F1 (regex)",
+      "value": 0.9643,
+      "direction": "up",
+      "n": 28
+    },
+    "e2e.metrics.json:pass_rate": {
+      "label": "end-to-end pass rate",
+      "value": 0.96,
+      "direction": "up",
+      "n": 25
+    },
+    "agent.metrics.json:pass_rate": {
+      "label": "agent pass rate",
+      "value": 1.0,
+      "direction": "up",
+      "n": 14
+    }
+  }
+}

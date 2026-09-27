@@ -57,6 +57,7 @@ eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant
 	python eval/runners/bench_latency.py
 	python eval/runners/make_report.py
 	@echo "\n==> eval/report.md"
+	@python eval/runners/gate.py   # non-zero exit on a regression vs eval/baseline.json
 
 eval-datasets:  ## rebuild the LLM-assisted labeled sets (retrieval); needs Qdrant + LLM key
 	python eval/runners/build_retrieval_set.py

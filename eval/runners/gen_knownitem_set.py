@@ -250,11 +250,27 @@ def main():
     ap.add_argument("--seed", type=int, default=int(os.environ.get("IDX_EVAL_SEED", 7)))
     ap.add_argument("--out", default="eval/datasets/mode_retrieval_gen.jsonl")
     ap.add_argument("--zh-share", type=float, default=0.4, help="fraction emitted as Chinese")
+    ap.add_argument("--append", action="store_true",
+                    help="extend the existing file instead of replacing it")
     args = ap.parse_args()
     if not llm_available():
         sys.exit("no LLM key — this generator needs one (LLM_API_KEY)")
 
+    path = os.path.join(ROOT, args.out)
+    existing = []
+    if args.append and os.path.exists(path):
+        existing = [json.loads(l) for l in open(path, encoding="utf-8") if l.strip()]
+        print(f"appending to {len(existing)} existing rows")
+    # A listing already used as a known-item target must not be re-used: two rows with the same
+    # gold would be the same question asked twice, which inflates n without adding evidence —
+    # and the paired test counts rows, so it would overstate power.
+    used = {r["gold"]["known_item"] for r in existing}
+
     rows = sample_listings(args.n, args.seed, zh_n=int(args.n * args.zh_share))
+    if used:
+        before = len(rows)
+        rows = [r for r in rows if int(r["id"]) not in used]
+        print(f"  dropped {before - len(rows)} already-used targets")
     print(f"sampled {len(rows)} listings across "
           f"{len({r['L_City'] for r in rows})} cities\n")
     conn = get_mysql()
@@ -275,7 +291,7 @@ def main():
             continue
         zh = bool(b["zh"]) and b["filter"]["city"] in ZH_CITIES
         out.append({
-            "id": f"mrg-{len(out) + 1:03d}",
+            "id": f"mrg-{len(existing) + len(out) + 1:03d}",
             "input": b["zh"] if zh else b["en"],
             "style": "generated",
             "lang": "zh" if zh else "en",
@@ -287,11 +303,10 @@ def main():
         print(f"  [{i:>3}] {'zh' if zh else 'en'} pool={b['pool']:>4}  {out[-1]['input'][:62]}")
     conn.close()
 
-    path = os.path.join(ROOT, args.out)
     with open(path, "w", encoding="utf-8") as fh:
-        for r in out:
+        for r in existing + out:
             fh.write(json.dumps(r, ensure_ascii=False) + "\n")
-    print(f"\nwrote {len(out)} rows -> {args.out}   skipped: {skipped}")
+    print(f"\nwrote {len(existing) + len(out)} rows ({len(out)} new) -> {args.out}   skipped: {skipped}")
     print("NOTE verified=false. Acceptance is not the row count — it is whether a sweep on "
           "these rows agrees in DIRECTION with the human rows (eval/runners/compare_sources.py).")
 

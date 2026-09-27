@@ -51,6 +51,14 @@ export interface AgentMetrics {
   toolErrors: number;          // hallucinated/unknown tools or skill errors
   loopGuards: number;          // times a repeat / per-tool-cap guard fired (thrashing signal)
   llmCalls: number;            // model calls (cost proxy)
+  /** Tokens actually billed for this drive, taken as a delta of two client snapshots. This is
+   * the real cost axis: `llmCalls` counts calls, but a call's price is dominated by how much
+   * context it carried, and a config change can cut calls while raising tokens (loading every
+   * tool schema up front vs. discovering them). Counts EVERYTHING the drive triggered, including
+   * LLM calls made underneath it by other layers. Zero when the provider reports no usage. */
+  promptTokens: number;
+  completionTokens: number;
+  totalTokens: number;
   groundingRewrites: number;   // grounding gate LLM-rewrite passes
   groundingStripped: number;   // grounding gate deterministic strips (rewrite couldn't fix)
   budgetExhausted: boolean;
@@ -112,13 +120,22 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
   const perTool = new Map<string, number>();
   let toolCalls = 0, toolErrors = 0, loopGuards = 0, llmCalls = 0;
   const t0 = Date.now();
+  // Cost baseline for THIS drive. A delta of two snapshots, not a reset, because the client is
+  // shared process-wide — a reset here would zero another caller's accounting.
+  const u0 = llm.usage?.() ?? { calls: 0, prompt: 0, completion: 0, total: 0 };
   const withMemory = (): ChatMessage[] =>
     isEmpty(mem) ? messages : [...messages, { role: 'system', content: renderMemory(mem) }];
-  const M = (extra: Partial<AgentMetrics> = {}): AgentMetrics => ({
-    steps: state.step, toolCalls, toolErrors, loopGuards, llmCalls,
-    groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false,
-    elapsedMs: Date.now() - t0, ...extra,
-  });
+  const M = (extra: Partial<AgentMetrics> = {}): AgentMetrics => {
+    const u = llm.usage?.() ?? u0;
+    return {
+      steps: state.step, toolCalls, toolErrors, loopGuards, llmCalls,
+      promptTokens: u.prompt - u0.prompt,
+      completionTokens: u.completion - u0.completion,
+      totalTokens: u.total - u0.total,
+      groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false,
+      elapsedMs: Date.now() - t0, ...extra,
+    };
+  };
 
   // graceful abort: an LLM call failed even after retry + circuit breaker -> don't crash.
   // Checkpoint the state (kept resumable) and return a friendly reply instead of throwing.
@@ -273,6 +290,7 @@ export async function resumeAgentRun(runId: number, opts: ResumeAgentOptions): P
     return { reply: `Run #${runId} is not awaiting approval (status: ${run.status}).`,
       trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId,
       metrics: { steps: run.state.step, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
+        promptTokens: 0, completionTokens: 0, totalTokens: 0,
         groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, elapsedMs: 0 } };
   }
   const state = run.state;
@@ -310,6 +328,7 @@ export async function retryAgentRun(runId: number, opts: RetryAgentOptions): Pro
     return { reply: `Run #${runId} is not interrupted (status: ${run.status}); nothing to retry.`,
       trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId,
       metrics: { steps: run.state.step, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
+        promptTokens: 0, completionTokens: 0, totalTokens: 0,
         groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, elapsedMs: 0 } };
   }
   await store.save(runId, { status: 'running' });

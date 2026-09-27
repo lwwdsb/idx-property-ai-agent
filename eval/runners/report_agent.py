@@ -70,6 +70,33 @@ def main():
             "latency_p50_ms": pct(50), "latency_p99_ms": pct(99), "latency_max_ms": lat[-1] if lat else 0,
         }
 
+    # COST, per task rather than per drive: a HITL task runs the loop twice and the resume spends
+    # real tokens. `runtime_metrics` above reads the first drive only (its booleans describe that
+    # drive); this block reads `cost`, which evalAgent sums across every drive of the task.
+    #
+    # Tokens are the axis a config change actually moves, and it can move them AGAINST the call
+    # count — loading every tool schema up front saves a discovery call while paying for the
+    # schemas on every turn — so calls and tokens are both kept, never one as a proxy for the other.
+    costs = [p["cost"] for p in preds if p.get("cost")]
+    cost_block = {}
+    if costs:
+        tot = sorted(c["totalTokens"] for c in costs)
+        cpct = lambda q: tot[min(len(tot) - 1, round(q / 100 * (len(tot) - 1)))] if tot else 0
+        n_c = len(costs)
+        cost_block = {
+            "n": n_c,
+            "drives_total": sum(c["drives"] for c in costs),
+            "tokens_total": sum(c["totalTokens"] for c in costs),
+            "tokens_prompt_total": sum(c["promptTokens"] for c in costs),
+            "tokens_completion_total": sum(c["completionTokens"] for c in costs),
+            "tokens_per_task_mean": round(sum(c["totalTokens"] for c in costs) / n_c, 1),
+            "tokens_per_task_p50": cpct(50), "tokens_per_task_max": tot[-1] if tot else 0,
+            "llm_calls_total": sum(c["llmCalls"] for c in costs),
+            "steps_total": sum(c["steps"] for c in costs),
+            # 0 when the provider returns no usage block — distinguishes "free" from "unmeasured".
+            "usage_reported": bool(sum(c["totalTokens"] for c in costs)),
+        }
+
     self_sent = meta.get("selfSentTotal")
     approve_sent, approve_expected = meta.get("approveSent"), meta.get("approveExpected")
     cancel_sent = meta.get("cancelSent")
@@ -86,6 +113,7 @@ def main():
         "completion": completion,
         "trajectory": {"mean_steps": mean_steps, "detours": detours, "per_task": traj},
         "runtime_metrics": runtime,
+        "cost": cost_block,
         "per_assertion": {k: {"passed": d[0], "total": d[1]} for k, d in kinds.items()},
         "tool_usage": {p["id"]: p["got"]["toolsUsed"] for p in preds},
         "failures": [{"task": p["task"], "hitl": p["hitl"], "got_tools": p["got"]["toolsUsed"],
@@ -104,6 +132,11 @@ def main():
     if completion["n_judged"]:
         print(f"  COMPLETION (LLM-judge, SOFT — DeepSeek self-judge, needs human calibration): "
               f"mean {completion['mean']}/2 · fully-done {completion['fully_done']}/{completion['n_judged']}")
+    if cost_block:
+        print(f"  COST: {cost_block['tokens_total']} tokens over {cost_block['drives_total']} drives "
+              f"({cost_block['tokens_per_task_mean']}/task, p50 {cost_block['tokens_per_task_p50']}, "
+              f"max {cost_block['tokens_per_task_max']}); {cost_block['llm_calls_total']} LLM calls"
+              + ("" if cost_block["usage_reported"] else "  ⚠️ provider reported NO usage — tokens unmeasured"))
     print(f"  TRAJECTORY: mean {mean_steps} steps/task; "
           + ("possible detours: " + ", ".join(detours) if detours else "no detours (steps ≈ distinct tools)"))
     if runtime:

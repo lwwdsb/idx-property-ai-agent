@@ -34,6 +34,16 @@ export interface ToolCall { id: string; name: string; arguments: Record<string, 
  * `raw` is the provider message to push back verbatim before appending tool results. */
 export interface ChatTurn { content: string; toolCalls: ToolCall[]; raw: ChatMessage; }
 
+/** Cumulative token spend on this client instance. Read it as a SNAPSHOT and subtract two
+ * snapshots to attribute cost to one operation — there is deliberately no reset, because a
+ * reset is shared mutable state and a client is shared by everything in the process.
+ *
+ * RETRIES ARE INCLUDED ON PURPOSE. `withResilience` may call the provider up to 3 times; every
+ * attempt that came back with a usage block is counted, because that is what the bill counts.
+ * An attempt that timed out returns no usage and is therefore invisible here — so `calls` is
+ * "responses parsed", not "requests sent", and it can be lower than the attempts made. */
+export interface TokenUsage { calls: number; prompt: number; completion: number; total: number; }
+
 export interface LLMClient {
   readonly available: boolean;
   parseFilters(query: string): Promise<FilterPatch>;
@@ -44,6 +54,8 @@ export interface LLMClient {
   /** One turn of a tool-calling loop: send the running transcript + available tools,
    * get back either a final answer or tool calls to execute. Optional (auto mode only). */
   chatWithTools?(messages: ChatMessage[], tools: ToolSpec[]): Promise<ChatTurn>;
+  /** Cumulative token spend so far (see TokenUsage). Absent when the LLM is unconfigured. */
+  usage?(): TokenUsage;
 }
 
 const PLAN_PROMPT = [
@@ -126,6 +138,23 @@ export function getLLMClient(): LLMClient {
       },
     };
   }
+  // One accumulator per client instance. Every provider response that carries a usage block
+  // adds to it, whichever entry point made the call — so a caller that snapshots before and
+  // after sees the cost of EVERYTHING it triggered, including the LLM calls made underneath it
+  // by other layers (memory selection, the grounding gate). That is the number that matters for
+  // a cost objective; attributing tokens to a single layer would undercount the run.
+  const spend: TokenUsage = { calls: 0, prompt: 0, completion: 0, total: 0 };
+  function record(data: unknown): void {
+    const u = (data as { usage?: Record<string, unknown> } | null)?.usage;
+    if (!u) return;
+    const n = (k: string): number => (typeof u[k] === 'number' ? u[k] as number : 0);
+    spend.calls += 1;
+    spend.prompt += n('prompt_tokens');
+    spend.completion += n('completion_tokens');
+    // total_tokens is what the provider bills; fall back to the sum when it is absent.
+    spend.total += n('total_tokens') || (n('prompt_tokens') + n('completion_tokens'));
+  }
+
   async function chatJSON(system: string, user: string): Promise<unknown> {
     return withResilience(async () => {
       const res = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
@@ -145,12 +174,14 @@ export function getLLMClient(): LLMClient {
         throw new Error(`LLM HTTP ${res.status}: ${(await res.text()).slice(0, 200)}`);
       }
       const data = (await res.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      record(data);
       return extractJson(data.choices?.[0]?.message?.content ?? '{}');
     }, { name: 'llm/chatJSON', timeoutMs: 30_000, retries: 2, breaker: llmBreaker });
   }
 
   return {
     available: true,
+    usage: () => ({ ...spend }),
     async parseFilters(query: string): Promise<FilterPatch> {
       const filter = sanitizeFilter(await chatJSON(SYSTEM_PROMPT, query));
       logger.debug('llm parsed filters', { query, filter });
@@ -197,6 +228,7 @@ export function getLLMClient(): LLMClient {
         const data = (await res.json()) as {
           choices?: Array<{ message?: { content?: string | null; tool_calls?: unknown[] } }>;
         };
+        record(data);
         const msg = data.choices?.[0]?.message ?? { content: '' };
         const rawCalls = Array.isArray(msg.tool_calls) ? msg.tool_calls : [];
         const toolCalls: ToolCall[] = rawCalls.map((tc) => {

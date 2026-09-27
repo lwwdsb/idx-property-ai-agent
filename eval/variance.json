@@ -1,0 +1,192 @@
+{
+  "__doc__": "实测噪声基线。每个条目 = 同一配置连跑 N 次的离散度。mde_* = 两组各 N 次比较时的最小可检测差值(2×SE_diff)，小于它的差异不能当成效应。改配置或改 prompt 后必须重测。",
+  "measured_at": "2026-09-27",
+  "commit": "0d91cca",
+  "tuning_sha": "55cdec9346fb",
+  "n_runs": 5,
+  "auto_agent": {
+    "__set__": "agent.jsonl 14 条任务 / 16 段 drive，llm=live",
+    "quality": {
+      "pass_rate": {
+        "min": 1.0,
+        "max": 1.0,
+        "mean": 1.0,
+        "stdev": 0.0,
+        "cv_pct": 0.0,
+        "mde_abs": 0.0,
+        "mde_pct": 0.0,
+        "values": [
+          1.0,
+          1.0,
+          1.0,
+          1.0,
+          1.0
+        ]
+      },
+      "completion_mean": {
+        "min": 1.79,
+        "max": 1.93,
+        "mean": 1.9,
+        "stdev": 0.0,
+        "cv_pct": 2.38,
+        "mde_abs": 0.1,
+        "mde_pct": 3.01,
+        "values": [
+          1.86,
+          1.79,
+          1.93,
+          1.86,
+          1.86
+        ]
+      }
+    },
+    "cost": {
+      "tokens_total": {
+        "min": 83242,
+        "max": 86829,
+        "mean": 84691.2,
+        "stdev": 1401.4,
+        "cv_pct": 1.65,
+        "mde_abs": 1772.7,
+        "mde_pct": 2.09,
+        "values": [
+          83242,
+          83711,
+          83801,
+          85873,
+          86829
+        ]
+      },
+      "tokens_per_task_mean": {
+        "min": 5945.9,
+        "max": 6202.1,
+        "mean": 6049.4,
+        "stdev": 100.1,
+        "cv_pct": 1.65,
+        "mde_abs": 126.6,
+        "mde_pct": 2.09,
+        "values": [
+          5945.9,
+          5979.4,
+          5985.8,
+          6133.8,
+          6202.1
+        ]
+      },
+      "tokens_per_task_p50": {
+        "min": 5638,
+        "max": 5849,
+        "mean": 5743.4,
+        "stdev": 87.5,
+        "cv_pct": 1.52,
+        "mde_abs": 110.7,
+        "mde_pct": 1.93,
+        "values": [
+          5640,
+          5799,
+          5791,
+          5638,
+          5849
+        ]
+      },
+      "tokens_per_task_max": {
+        "min": 12862,
+        "max": 15577,
+        "mean": 13455,
+        "stdev": 1062.2,
+        "cv_pct": 7.89,
+        "mde_abs": 1343.6,
+        "mde_pct": 9.99,
+        "values": [
+          12886,
+          12939,
+          13011,
+          15577,
+          12862
+        ]
+      },
+      "llm_calls_total": {
+        "min": 31,
+        "max": 32,
+        "mean": 31.4,
+        "stdev": 0.5,
+        "cv_pct": 1.56,
+        "mde_abs": 0.6,
+        "mde_pct": 1.97,
+        "values": [
+          31,
+          31,
+          31,
+          32,
+          32
+        ]
+      },
+      "steps_total": {
+        "min": 35,
+        "max": 36,
+        "mean": 35.4,
+        "stdev": 0.5,
+        "cv_pct": 1.38,
+        "mde_abs": 0.6,
+        "mde_pct": 1.75,
+        "values": [
+          35,
+          35,
+          35,
+          36,
+          36
+        ]
+      }
+    },
+    "latency": {
+      "p50_ms": {
+        "min": 2285,
+        "max": 2950,
+        "mean": 2647.8,
+        "stdev": 270.4,
+        "cv_pct": 10.21,
+        "mde_abs": 342.0,
+        "mde_pct": 12.92,
+        "values": [
+          2362,
+          2800,
+          2842,
+          2285,
+          2950
+        ]
+      },
+      "p99_ms": {
+        "min": 7269,
+        "max": 11870,
+        "mean": 10659.6,
+        "stdev": 1709.9,
+        "cv_pct": 16.04,
+        "mde_abs": 2162.9,
+        "mde_pct": 20.29,
+        "values": [
+          11168,
+          11870,
+          11525,
+          7269,
+          11466
+        ]
+      }
+    }
+  },
+  "memory_select": {
+    "__set__": "memory_select.jsonl 10 条 / 18 gold 项。两个 prompt 版本各跑 5 次:当前版本逐位相同，上一版本在摆。",
+    "__note__": "因此噪声是 prompt 的属性而非只是集的属性，换 prompt 必须重测。门禁容差取两版里更宽的那个。",
+    "precision": {
+      "gate_tolerance": 0.1,
+      "prev_prompt_min": 0.8,
+      "prev_prompt_max": 0.9,
+      "current_prompt": "bit-identical x5"
+    },
+    "recall": {
+      "gate_tolerance": 0.21,
+      "prev_prompt_min": 0.604,
+      "prev_prompt_max": 0.812,
+      "current_prompt": "bit-identical x5"
+    }
+  }
+}

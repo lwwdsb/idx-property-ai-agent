@@ -92,11 +92,26 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
     const send = async (m: { recipients: string[] }) => { sentBox.push(m.recipients); };
 
     let r1: AgentResult | undefined;
+    // Cost is per TASK, not per drive. A HITL task runs the loop twice (suspend, then resume
+    // after approval) and the resume spends real tokens, so recording only r1.metrics would
+    // undercount exactly the tasks that cost the most. Summed here; the booleans take r1's.
+    let cost = { steps: 0, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
+      promptTokens: 0, completionTokens: 0, totalTokens: 0, elapsedMs: 0, drives: 0 };
+    const addCost = (m: AgentResult['metrics'] | undefined): void => {
+      if (!m) return;
+      cost = { steps: cost.steps + m.steps, toolCalls: cost.toolCalls + m.toolCalls,
+        toolErrors: cost.toolErrors + m.toolErrors, loopGuards: cost.loopGuards + m.loopGuards,
+        llmCalls: cost.llmCalls + m.llmCalls, promptTokens: cost.promptTokens + m.promptTokens,
+        completionTokens: cost.completionTokens + m.completionTokens,
+        totalTokens: cost.totalTokens + m.totalTokens,
+        elapsedMs: cost.elapsedMs + m.elapsedMs, drives: cost.drives + 1 };
+    };
     let res = { toolsUsed: [] as string[], stopReason: 'error', steps: 0, reply: '', runId: undefined as number | undefined };
     try {
       r1 = await runAgent(c.task, { userId: operator, registry, llm, store: runStore, progressive: false });
       res = { toolsUsed: [...new Set(r1.trace.filter((t) => t.tool).map((t) => t.tool as string))],
         stopReason: r1.stopReason, steps: r1.steps, reply: r1.reply, runId: r1.runId };
+      addCost(r1.metrics);
     } catch (e) {
       res.reply = `ERROR: ${String(e)}`;
     }
@@ -113,6 +128,7 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
         hitlChecks.hitl_sent_after_approve = sentBox.length >= 1 && sentBeforeApprove === 0;
         hitlChecks.hitl_resumed = r2.stopReason === 'final';
         if (sentBox.length >= 1) approveSent++;
+        addCost(r2.metrics);
         res = { ...res, reply: r2.reply, steps: r2.steps };
       } else if (c.hitl === 'cancel') {
         await cancelDraft(r1.pendingDraftId, draftStore);
@@ -120,6 +136,7 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
         hitlChecks.hitl_not_sent_after_cancel = sentBox.length === 0;
         hitlChecks.hitl_resumed = r2.stopReason === 'final';
         cancelSent += sentBox.length;
+        addCost(r2.metrics);
         res = { ...res, reply: r2.reply, steps: r2.steps };
       }
     }
@@ -141,7 +158,10 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
     preds.push({ id: c.id, task: c.task, note: c.note, hitl: c.hitl ?? null, expect: c.expect,
       got: { toolsUsed: res.toolsUsed, stopReason: res.stopReason, steps: res.steps,
         reply: res.reply.slice(0, 200), idCount: g.idCount, ungrounded: g.ungrounded },
-      checks, pass, judge, metrics: r1?.metrics ?? null });
+      checks, pass, judge,
+      // `metrics` = first drive (booleans like budgetExhausted/suspended describe that drive);
+      // `cost` = the whole task, every drive summed. The loop optimises against `cost`.
+      metrics: r1?.metrics ?? null, cost: cost.drives ? cost : null });
   }
 
   writeFileSync(`${OUT}/agent.preds.jsonl`, preds.map((p) => JSON.stringify(p)).join('\n') + '\n');

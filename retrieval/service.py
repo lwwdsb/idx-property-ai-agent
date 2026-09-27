@@ -16,7 +16,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 
-from common import get_dense, load_env
+from common import COLLECTION, get_dense, load_env
 from tuning import RERANK_COARSE, RERANK_ENABLED, SEARCH_TOP_K
 from rag import RagIndex, answer as rag_answer
 from recommend import validate_price, recommend as do_recommend, format_reco
@@ -141,7 +141,9 @@ app = FastAPI(lifespan=lifespan)
 
 @app.get("/health")
 def health():
-    return {"ok": True, "rag_chunks": len(STATE["rag"].chunks)}
+    # The collection is reported because an A/B between two indexes is worthless if the
+    # harness cannot tell which one it just measured — eval_knownitem_service.py prints this.
+    return {"ok": True, "rag_chunks": len(STATE["rag"].chunks), "collection": COLLECTION}
 
 
 class ClassifyReq(BaseModel):

@@ -13,6 +13,7 @@ whatever /health says it is serving, so an A/B cannot silently compare a collect
 import argparse
 import json
 import os
+import re
 import sys
 import urllib.request
 from collections import defaultdict
@@ -37,10 +38,31 @@ def load(name):
     return [json.loads(l) for l in open(p, encoding="utf-8") if l.strip()] if os.path.exists(p) else []
 
 
+def strip_city(text, city):
+    """Production does NOT send the raw query to /search.
+
+    The TS search skill calls extractSemanticText(message, filter), whose first act is to
+    remove the matched city from the text (skills.ts) — the city travels as a hard FILTER, and
+    what goes to the semantic side is the residue. Sending the raw query here made the A/B
+    measure a path that does not exist: with the city removed from the document text but still
+    present in the query, the query vector points partly at a direction no document has, and
+    known-item recall fell by ~0.18 on the human subset. That was an artifact of the harness,
+    not of the index. Only the city is reproduced here, because the city is the variable under
+    test; the rest of extractSemanticText's stripping is identical across both collections and
+    so cannot bias the comparison.
+    """
+    if not city:
+        return text
+    out = re.sub(re.escape(city), " ", text, flags=re.I)
+    return re.sub(r"\s+", " ", out).strip() or text
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--tag", default="")
+    ap.add_argument("--raw", action="store_true",
+                    help="send the raw query instead of the city-stripped residue (NOT production)")
     args = ap.parse_args()
 
     with urllib.request.urlopen(f"{URL}/health", timeout=10) as r:
@@ -54,10 +76,13 @@ def main():
         if not cases:
             continue
         hits, n, empty, dupes = 0, 0, 0, 0
+        per_case = {}   # id -> hit/miss, so two runs can be compared PAIRED rather than as
+                        # two point estimates — the whole discipline of the loop's gate
         per_lang = defaultdict(lambda: [0, 0])
         for i, c in enumerate(cases, 1):
             f = c["gold"].get("filter") or {}
-            body = {"text": c["input"], "k": args.k,
+            text = c["input"] if args.raw else strip_city(c["input"], f.get("city"))
+            body = {"text": text, "k": args.k,
                     "city": f.get("city"), "max_price": f.get("maxPrice"),
                     "min_price": f.get("minPrice"), "min_beds": f.get("beds"),
                     "pool": f.get("pool"),
@@ -67,6 +92,7 @@ def main():
             hit = int(c["gold"]["known_item"] in ids)
             hits += hit
             n += 1
+            per_case[c["id"]] = hit
             per_lang[c.get("lang", "?")][0] += hit
             per_lang[c.get("lang", "?")][1] += 1
             # quality signals a recall number cannot show
@@ -80,7 +106,8 @@ def main():
             "recall_at_k": round(hits / n, 4), "hits": hits, "n": n,
             "queries_with_duplicate_results": dupes,
             "queries_returning_fewer_than_k": empty,
-            "by_lang": {k: round(v[0] / v[1], 4) for k, v in per_lang.items()}}
+            "by_lang": {k: round(v[0] / v[1], 4) for k, v in per_lang.items()},
+            "per_case": per_case}
         s = out["subsets"][label]
         print(f"  {label:10} recall@{args.k} {s['recall_at_k']} ({hits}/{n})"
               f"  dup-in-results {dupes}  short-results {empty}  by-lang {s['by_lang']}")

@@ -15,7 +15,15 @@ from fastembed import TextEmbedding, SparseTextEmbedding
 DENSE_MODEL = "BAAI/bge-small-en-v1.5"   # 384-dim, small + fast, runs on CPU
 DENSE_DIM = 384
 SPARSE_MODEL = "Qdrant/bm25"
-COLLECTION = os.environ.get("QDRANT_COLLECTION", "listings")
+def _collection():
+    """os.environ wins, then .env, then the default.
+
+    QDRANT_URL was read from .env while QDRANT_COLLECTION was read ONLY from os.environ, so a
+    collection named in .env was silently ignored and every consumer had to be launched with an
+    inline env var to agree on which index it was using. An A/B between two collections is
+    exactly where that inconsistency does damage."""
+    v = os.environ.get("QDRANT_COLLECTION", "").strip()
+    return v or load_env().get("QDRANT_COLLECTION", "").strip() or "listings"
 
 
 def load_env(path=None):
@@ -29,6 +37,9 @@ def load_env(path=None):
                 k, v = line.split("=", 1)
                 env[k.strip()] = v.strip()
     return env
+
+
+COLLECTION = _collection()
 
 
 @lru_cache(maxsize=1)

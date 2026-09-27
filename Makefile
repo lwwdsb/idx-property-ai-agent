@@ -4,6 +4,13 @@
 SHELL := /bin/bash
 ENV_FILE := .env
 
+# Python for the eval/retrieval steps. The repo's Python deps (pymysql, qdrant-client,
+# fastembed) live ONLY in .venv, so a bare `python` cannot run eval_retrieval.py and
+# `make eval` died partway every time — which also meant the regression gate at the end of
+# the target had never actually run as part of it. Fall back to `python` if the venv is gone,
+# so the failure is a clear ImportError rather than a missing-file error.
+PY := $(if $(wildcard .venv/bin/python),.venv/bin/python,python)
+
 # export every var defined in .env to recipe environments
 ifneq (,$(wildcard $(ENV_FILE)))
 include $(ENV_FILE)
@@ -41,23 +48,23 @@ down:           ## stop the app services (orchestrate + retrieval)
 	bash scripts/stop-local.sh
 
 eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant + LLM key)
-	python eval/runners/provenance.py
-	python eval/metrics/test_metrics.py
+	$(PY) eval/runners/provenance.py
+	$(PY) eval/metrics/test_metrics.py
 	npx tsx eval/runners/evalIntentParse.ts
-	python eval/runners/report_intent_parse.py
+	$(PY) eval/runners/report_intent_parse.py
 	npx tsx eval/runners/evalE2E.ts
-	python eval/runners/report_e2e.py
+	$(PY) eval/runners/report_e2e.py
 	npx tsx eval/runners/evalModeRetrieval.ts
-	python eval/runners/report_mode_intent.py
+	$(PY) eval/runners/report_mode_intent.py
 	npx tsx eval/runners/evalAgent.ts
-	python eval/runners/report_agent.py
-	python eval/runners/eval_retrieval.py
-	python eval/runners/eval_rag.py
-	python eval/runners/tune_retrieval.py
-	python eval/runners/bench_latency.py
-	python eval/runners/make_report.py
+	$(PY) eval/runners/report_agent.py
+	$(PY) eval/runners/eval_retrieval.py
+	$(PY) eval/runners/eval_rag.py
+	$(PY) eval/runners/tune_retrieval.py
+	$(PY) eval/runners/bench_latency.py
+	$(PY) eval/runners/make_report.py
 	@echo "\n==> eval/report.md"
-	@python eval/runners/gate.py   # non-zero exit on a regression vs eval/baseline.json
+	@$(PY) eval/runners/gate.py   # non-zero exit on a regression vs eval/baseline.json
 
 eval-datasets:  ## rebuild the LLM-assisted labeled sets (retrieval); needs Qdrant + LLM key
-	python eval/runners/build_retrieval_set.py
+	$(PY) eval/runners/build_retrieval_set.py

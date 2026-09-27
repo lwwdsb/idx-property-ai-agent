@@ -14,9 +14,21 @@ TWO KINDS OF RULE, because two kinds of thing can go wrong:
 
 WHAT IS DELIBERATELY NOT GATED. The whitelist follows the credibility ordering the project
 already records per metric: objective gold and human labels may gate; LLM-judge grades may
-not. retrieval.metrics.json (nDCG from DeepSeek grades) is excluded, because gating on a judge
-that was shown to flip dense against bm25 when only the labels changed would let the gate
-optimise toward the judge's bias. It stays in the report as information.
+not. retrieval.metrics.json (nDCG from DeepSeek grades) is excluded for TWO independent
+reasons, and it stays in the report as information only.
+
+  JUDGE BIAS — the grades flip dense against bm25 when only the labels change, so gating on
+  them would let the gate optimise toward the judge rather than toward quality.
+  POOL BIAS — the labels come from a pool built by a PARTICULAR index. After the index was
+  rebuilt, 50% of dense's top-10 and ~30% of bm25/hybrid's were outside the graded set and
+  therefore scored as irrelevant by default; dense's nDCG@10 "fell" from ~0.75 to 0.445 on a
+  change the objective known-item set found indistinguishable (McNemar p=1.0). The metric is
+  not comparable across an index change at all.
+
+  The dataset schema is what makes the second one unfixable in place: `label.relevant` stores
+  only graded POSITIVES plus a pool_size count, so "judged irrelevant" and "never judged"
+  cannot be told apart. Making this set usable after a reindex needs an explicit pool id list
+  with zero grades recorded, and a re-pool + re-judge whenever the index changes.
 
   python eval/runners/gate.py            # compare to eval/baseline.json, exit 1 on regression
   python eval/runners/gate.py --accept   # adopt the current run as the new baseline (explicit)

@@ -20,13 +20,22 @@ FIELDS = ("id, L_DisplayId, L_Address, L_City, L_Type_, L_Keyword2, LM_Dec_3, "
           "LM_Int2_3, L_SystemPrice, PoolPrivateYN, L_Remarks")
 
 
+MIN_REMARK_CHARS = 40   # below this a remark carries no semantic signal (see fetch_rows)
+
+
 def fetch_rows(limit=None, city=None):
     env = load_env()
     conn = pymysql.connect(
         host=env.get("DB_HOST", "127.0.0.1"), port=int(env.get("DB_PORT", 3306)),
         user=env.get("DB_USER", "root"), password=env.get("DB_PASSWORD", ""),
         database=env.get("DB_NAME", "idx_exchange"), cursorclass=pymysql.cursors.DictCursor)
-    sql = f"SELECT {FIELDS} FROM rets_property WHERE L_Status='Active'"
+    # A listing whose remark is empty or a stub has nothing for a SEMANTIC query to match, yet
+    # 328 Active listings have no remark at all and 359 have under 40 characters — and they DO
+    # surface (two blank ones came back for "close to the beach"). Excluding them from the
+    # semantic index does not hide them from users: the structured MySQL path still returns
+    # them, because there the match is on fields, not on text.
+    sql = (f"SELECT {FIELDS} FROM rets_property WHERE L_Status='Active'"
+           f" AND CHAR_LENGTH(TRIM(COALESCE(L_Remarks,''))) >= {MIN_REMARK_CHARS}")
     params = []
     if city:
         sql += " AND L_City=%s"; params.append(city)

@@ -80,6 +80,45 @@ async def lifespan(app):
     STATE.clear()
 
 
+
+def _dedupe(points, texts=None):
+    """Collapse listings a user would see as the same result.
+
+    TWO DISTINCT DEFECTS, both found by reading result sets rather than by any metric:
+
+    1. The SAME HOME posted twice. Two different listing ids shared one address and one price
+       ("Pershing Road, Chula Vista, $1,062,900", remark "Solar panels included!") and both
+       came back in one top-10. These are duplicate rows in the MLS feed, not an index bug, so
+       they cannot be fixed at ingest — we have no way to know which row is canonical.
+    2. TEMPLATE TEXT across different homes. Three to-be-built listings in one new-build
+       community carried byte-identical marketing copy, filling three of ten slots with the
+       same description. Different homes, so they are not dropped blindly — only the extra
+       copies of the identical DESCRIPTION are, because after the first one the rest add no
+       information to a semantic result set.
+
+    Honest caveat: known-item recall can FALL from this while user-visible quality rises. If
+    the gold target happens to be the suppressed twin, the metric records a miss even though
+    the surviving twin is the same house. The metric and the reader disagree here, and the
+    metric is the one that is wrong.
+    """
+    seen_home, seen_text, out = set(), set(), []
+    for i, p in enumerate(points):
+        pl = p.payload or {}
+        home = (str(pl.get("address") or "").strip().lower(), pl.get("price"))
+        if home[0] and home in seen_home:
+            continue
+        body = None
+        if texts is not None:
+            body = (texts.get(int(pl.get("listing_id") or p.id)) or "").strip().lower()
+        if body and len(body) > 80 and body in seen_text:
+            continue
+        seen_home.add(home)
+        if body:
+            seen_text.add(body)
+        out.append(p)
+    return out
+
+
 def _remarks(ids):
     """Fetch listing text for rerank candidates (payload has no remarks). Small IN-query by PK."""
     if not ids:
@@ -179,6 +218,9 @@ def search(req: SearchReq):
             coarse = hybrid_search(req.text, flt, k=max(RERANK_COARSE, req.k), mode="hybrid")
             try:
                 texts = _remarks([int(p.payload["listing_id"]) for p in coarse])
+                # Dedupe the COARSE pool, so the cross-encoder never spends a slot on a copy
+                # and top-k is clean without needing a second pass.
+                coarse = _dedupe(coarse, texts)
                 docs = [texts.get(int(p.payload["listing_id"]), "") for p in coarse]
                 scores = list(reranker.rerank(req.text, docs))
                 ranked = sorted(zip(coarse, scores), key=lambda x: -x[1])[:req.k]
@@ -186,7 +228,9 @@ def search(req: SearchReq):
             except Exception:
                 pts = coarse[:req.k]   # rerank failed -> keep hybrid order (乙)
                 return {"results": [{"score": p.score, **p.payload} for p in pts]}
-        pts = hybrid_search(req.text, flt, k=req.k, mode="hybrid")
+        # No rerank: remarks were never fetched, so only the address+price rule can apply.
+        # Over-fetch first, since dedupe can only shrink the list.
+        pts = _dedupe(hybrid_search(req.text, flt, k=req.k * 2, mode="hybrid"))[:req.k]
         return {"results": [{"score": p.score, **p.payload} for p in pts]}
     except Exception as e:  # Qdrant down — caller degrades to MySQL
         return {"error": f"semantic search unavailable: {e}", "results": []}

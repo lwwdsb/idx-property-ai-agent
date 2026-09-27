@@ -59,9 +59,16 @@ def get_sparse():
 def build_doc_text(r: dict) -> str:
     """The text embedded + BM25-indexed per listing. Remarks carry most of the
     semantic/keyword signal; structured bits add context."""
+    # The CITY IS DELIBERATELY ABSENT. It used to be embedded here as "in <City>", which made
+    # the city name part of the semantic signal — so "mountain views" matched listings whose
+    # only qualification was sitting in the CITY of Mountain View (measured: 5 of the top 10,
+    # on both dense and bm25), and "near the lake" pulled in Lake Forest (3 of 10). The city is
+    # already a payload field with its own index and is applied as a HARD FILTER, so having it
+    # in the embedded text bought nothing for filtering and cost half a result set to a name
+    # collision. A query that names a city has that city extracted into the filter; what is
+    # left for the semantic side is the residue, which is what should match the remark.
     parts = [
         r.get("L_Type_") or "",
-        f"in {r.get('L_City')}" if r.get("L_City") else "",
         f"{r.get('L_Keyword2')} bed" if r.get("L_Keyword2") else "",
         f"{r.get('LM_Dec_3')} bath" if r.get("LM_Dec_3") else "",
         f"{r.get('LM_Int2_3')} sqft" if r.get("LM_Int2_3") else "",

@@ -168,6 +168,24 @@
       "value": 0.7292,
       "direction": "up",
       "n": 10
+    },
+    "memory_dynamics.metrics.json:pass_rate": {
+      "label": "memory dynamics pass rate",
+      "value": 1,
+      "direction": "up",
+      "n": 9
+    },
+    "memory_utility.metrics.json:pass_rate": {
+      "label": "memory utility pass rate",
+      "value": 0.8571,
+      "direction": "up",
+      "n": 7
+    },
+    "memory_utility.metrics.json:utility_rate": {
+      "label": "memory changed the outcome (positives)",
+      "value": 0.75,
+      "direction": "up",
+      "n": 7
     }
   }
 }

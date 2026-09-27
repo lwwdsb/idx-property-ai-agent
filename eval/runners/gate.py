@@ -57,6 +57,9 @@ GATED = [
     ("memory_facts.metrics.json", "pass_rate", "memory facts pass rate", "up", "n"),
     ("memory_select.metrics.json", "arms.llm.precision", "memory injection precision", "up", "n"),
     ("memory_select.metrics.json", "arms.llm.recall", "memory injection recall", "up", "n"),
+    ("memory_dynamics.metrics.json", "pass_rate", "memory dynamics pass rate", "up", "n"),
+    ("memory_utility.metrics.json", "pass_rate", "memory utility pass rate", "up", "n"),
+    ("memory_utility.metrics.json", "utility_rate", "memory changed the outcome (positives)", "up", "n"),
 ]
 # Invariants: (file, dotted path, required value, why it is absolute)
 HARD = [
@@ -70,6 +73,9 @@ HARD = [
     # A remembered preference filling a blank is a default; overriding a field the user just
     # stated is a hijack. One violation is a failure regardless of every other number.
     ("memory_facts.metrics.json", "invariant_ok", True, "a remembered value must never override a stated one"),
+    # A memory system that changes everything is as broken as one that changes nothing: the
+    # negative controls are the half that catches pollution.
+    ("memory_utility.metrics.json", "controls_held", True, "memory must NOT change the outcome where it should not"),
 ]
 
 

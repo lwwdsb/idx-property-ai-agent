@@ -115,7 +115,7 @@ export function regexParse(query: string): SearchFilter {
 
   let m: RegExpMatchArray | null;
   if ((m = q.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:bed(?:room)?s?|br|bd)\b/i)) ||
-      (m = q.match(/(\d+)\s*(?:居室|室|卧室|卧|房)/))) {
+      (m = q.match(/(\d+)\s*(?:居室|卧室|居|室|卧|房)/))) {
     f.beds = Number(m[1]);
   }
   if ((m = q.match(/(\d+(?:\.\d+)?)\s*\+?\s*(?:bath(?:room)?s?|ba)\b/i)) ||

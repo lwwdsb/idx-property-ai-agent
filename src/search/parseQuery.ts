@@ -13,7 +13,7 @@
  * "3 beds" instead of accumulating a contradictory AND.
  */
 import { regexParse } from './regexParse.js';
-import { normalizeQuery } from './normalize.js';
+import { cityFromAlias, normalizeQuery } from './normalize.js';
 import { mergeFilter, filledCount, type SearchFilter } from './filters.js';
 import type { LLMClient } from '../llm/client.js';
 
@@ -71,6 +71,16 @@ export async function parseQuery(query: string, opts: ParseOptions = {}): Promis
 
   // 1. regex fast-path
   const regex = regexParse(normalized);
+  // A Chinese city alias is a DICTIONARY hit, so it outranks the sentence-shape patterns in
+  // regexParse — and it must be looked up in the RAW query, because normalizeQuery has already
+  // rewritten 尔湾 to "Irvine" by this point, leaving nothing for an alias lookup to match.
+  // That lookup ran on the normalized text at first and silently found nothing, which is why a
+  // Chinese query still reached Qdrant with no city: none of regexParse's patterns cover a
+  // Latin city spliced into a Chinese sentence ("Irvine 赛普拉斯村...").
+  if (!regex.city) {
+    const alias = cityFromAlias(query);
+    if (alias) regex.city = alias;
+  }
   let filter = mergeFilter(base, regex);
   let source: ParseResult['source'] = filledCount(regex) > 0 ? 'regex' : 'base';
 

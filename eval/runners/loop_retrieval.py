@@ -6,7 +6,8 @@ shared knob reaches both paths through the same SkillRegistry, and an improvemen
 that costs the other is not an improvement.
 
 THREE CHANNELS, all objective (the gold is "this exact listing", no judge anywhere):
-  generated     103 rows, gold filter + city-stripped text — clean input
+  generated     171 rows, gold filter + the REAL extractSemanticText output (precomputed by
+                genSemanticPreds.ts — no LLM, since the gold filter is ground truth)
   human/regex    39 rows, the DETERMINISTIC path's real extraction (regex_filter/_semantic)
   human/auto     39 rows, the AUTO path's real extraction (auto_filter/_semantic)
 The two human channels reuse eval/history/mode_retrieval.preds.jsonl, so the upstream LLM
@@ -75,13 +76,29 @@ def strip_city(text, city):
 
 def build_channels():
     gen = [c for c in jsonl("mode_retrieval_gen.jsonl") if (c.get("gold") or {}).get("known_item")]
+    gpred = {p["id"]: p for p in jsonl("mode_retrieval_gen.preds.jsonl", HIST)}
     hum = {c["id"]: c for c in jsonl("mode_retrieval.jsonl") if (c.get("gold") or {}).get("known_item")}
     preds = {p["id"]: p for p in jsonl("mode_retrieval.preds.jsonl", HIST)}
 
     ch = {"generated": [], "human/regex": [], "human/auto": []}
+    stale_gen = 0
     for c in gen:
         f = c["gold"].get("filter") or {}
-        ch["generated"].append((c["id"], strip_city(c["input"], f.get("city")), f, c["gold"]["known_item"]))
+        p = gpred.get(c["id"])
+        if p is None:
+            # Fall back to the crude approximation, but say so: it deletes only the city, while
+            # production also strips normalized numbers/units and filler, which on a Chinese
+            # query is most of the string.
+            stale_gen += 1
+            text = strip_city(c["input"], f.get("city"))
+        else:
+            text = p["semantic"]
+            if not text:
+                continue          # never reaches Qdrant in production
+        ch["generated"].append((c["id"], text, f, c["gold"]["known_item"]))
+    if stale_gen:
+        print(f"  WARNING: {stale_gen} generated rows have no precomputed semantic text — "
+              f"run `npx tsx eval/runners/genSemanticPreds.ts` (using the crude approximation)")
     missing_preds = 0
     for cid, c in hum.items():
         p = preds.get(cid)

@@ -8,6 +8,7 @@ import { defaultSessionStore, freshSession } from '../agent/session.js';
 import { getMarketStats, formatMarketStats } from '../market/marketStats.js';
 import { formatListingCard, type ListingRow } from '../search/listingRow.js';
 import { summarizeFilter, type SearchFilter } from '../search/filters.js';
+import { normalizeQuery } from '../search/normalize.js';
 import { getMapsClient, type MapsClient } from '../maps/mapsClient.js';
 import { MySqlDraftStore, type DraftStore } from '../email/drafts.js';
 import { draftEmail, previewDraft } from '../email/email.js';
@@ -75,10 +76,16 @@ const ACTION_WORDS = /\b(market|trend|appreciat\w*|similar|recommend|comparable|
 /** The "soft" part of a query — what's left after removing structured/filler tokens.
  * Non-empty => the user wants semantic matching (route to the Qdrant hybrid). */
 export function extractSemanticText(message: string, filter: SearchFilter): string {
-  let s = ` ${message} `;
+  // NORMALIZE FIRST. The stripping below removes `filter.city`, i.e. the LATIN name ("Irvine"),
+  // but a Chinese query says 尔湾 — so the transliterated city used to survive into the semantic
+  // text and compete with the query's meaning inside the embedding, the same pollution just
+  // removed from the document side. Normalizing also turns 一百二十万 and 三居 into digits, which
+  // the number/unit stripper below can then remove; before this they travelled to Qdrant as
+  // noise against an English corpus.
+  let s = ` ${normalizeQuery(message)} `;
   if (filter.city) s = s.replace(new RegExp(filter.city, 'gi'), ' ');
   // numbers + units (beds/baths/price/sqft, incl. 中文)
-  s = s.replace(/\$?\d[\d.,]*\s*(?:万|million|mil|m|k|thousand|bed(?:room)?s?|br|bd|bath(?:room)?s?|ba|sqft|sq\.?\s?ft|square feet|平方英尺|居室|室|卧室|卧|房|卫|平)?/gi, ' ');
+  s = s.replace(/\$?\d[\d.,]*\s*(?:万|million|mil|m|k|thousand|bed(?:room)?s?|br|bd|bath(?:room)?s?|ba|sqft|sq\.?\s?ft|square feet|平方英尺|居室|卧室|居|室|卧|房|卫|平)?/gi, ' ');
   // property-type + pool words
   s = s.replace(/\b(?:single[\s-]?family|sfr|detached|town\s?houses?|town\s?homes?|condos?|condominiums?|apartments?|apts?)\b|独栋|单户|联排|公寓|pool|泳池|游泳池/gi, ' ');
   s = s.replace(ACTION_WORDS, ' ').replace(EN_FILLER, ' ').replace(ZH_FILLER, ' ');

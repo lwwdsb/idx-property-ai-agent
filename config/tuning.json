@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "shared": {
+    "retrieval": {
+      "rerankCoarse": 20,
+      "prefetch": 30,
+      "rerankEnabled": true,
+      "topK": 5
+    },
+    "search": {
+      "maxResults": 50,
+      "tooMany": 200
+    },
+    "rag": {
+      "chunkSize": 600,
+      "chunkOverlap": 100,
+      "topK": 3
+    },
+    "facts": {
+      "confidenceThreshold": 0.5
+    }
+  },
+  "deterministic": {
+    "intent": {
+      "embedThreshold": 0.58,
+      "embedMargin": 0.05
+    }
+  },
+  "auto": {
+    "loop": {
+      "maxSteps": 8,
+      "maxPerTool": 3
+    },
+    "memory": {
+      "selectSemantic": 5,
+      "selectEpisodic": 3
+    }
+  }
+}

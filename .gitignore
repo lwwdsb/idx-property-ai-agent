@@ -115,3 +115,6 @@ eval/**/*.raw.jsonl
 eval/**/*.pool.jsonl
 eval/history/
 eval/report.md
+
+# tuning CLI rollback snapshot (transient — churns on every sweep)
+config/tuning.prev.json

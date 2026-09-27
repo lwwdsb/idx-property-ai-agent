@@ -10,6 +10,8 @@ import { isKnownCity } from '../search/cityDictionary.js';
 import { structuralCount, type SearchFilter } from '../search/filters.js';
 import type { LLMClient } from '../llm/client.js';
 import type { IntentGuess } from './bridge.js';
+// config/tuning.json -> deterministic.intent (auto mode never routes through here).
+import { EMBED_THRESHOLD, EMBED_MARGIN } from '../tuning.js';
 
 export type Intent = 'search' | 'market' | 'recommend' | 'knowledge' | 'compound' | 'email' | 'unknown';
 
@@ -36,8 +38,6 @@ export interface ClassifyOptions {
  * decisive (>= EMBED_MARGIN). The margin catches out-of-domain inputs that score
  * moderately high on some intent but are "half-like" several — a single score threshold
  * can't separate those because in/out scores overlap. Below either -> unknown/clarify. */
-const EMBED_THRESHOLD = 0.58;
-const EMBED_MARGIN = 0.05;
 const ROUTABLE = new Set<Intent>(['search', 'market', 'recommend', 'knowledge', 'email']);
 
 export const MARKET_RE = /\b(market|median|average price|avg price|price per|per sq\.?\s?ft|per square foot|trend|appreciat|going up|going down|good time to buy|worth buying)\b|行情|均价|中位|每平尺|每平方|走势|趋势|房价|涨|跌|升值|贬值|涨幅|跌幅|成交怎么样|最近成交/i;

@@ -23,10 +23,11 @@ import { freshMemory, recordStep, renderMemory, isEmpty, type WorkingMemory } fr
 import type { SearchFilter } from '../../search/filters.js';
 import { MySqlAgentRunStore, type AgentRunStore, type AgentRunState, type AgentTraceStep } from './runStore.js';
 import { groundFinal } from './grounding.js';
+// config/tuning.json -> auto.loop. NOT swept automatically: the 14-task eval set and
+// p99 15.4s mean variance swamps the effect size (see config/README.md).
+import { MAX_STEPS, MAX_PER_TOOL } from '../../tuning.js';
 export type { AgentTraceStep };
 
-const MAX_STEPS = 8;
-const MAX_PER_TOOL = 3;      // soft cap: same tool called this many times -> nudge to finish
 
 const SYSTEM = [
   'You are an autonomous real-estate assistant. Use the provided tools to FULLY complete',

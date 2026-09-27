@@ -19,9 +19,10 @@ import numpy as np
 
 from common import get_dense
 from llm import chat, llm_available
+from tuning import RAG_CHUNK_SIZE, RAG_OVERLAP, RAG_TOP_K
 
 KB_DIR = os.path.join(os.path.dirname(__file__), "..", "knowledge")
-CHUNK_SIZE, OVERLAP = 600, 100
+CHUNK_SIZE, OVERLAP = RAG_CHUNK_SIZE, RAG_OVERLAP   # config/tuning.json -> shared.rag
 
 
 def _split(text, size=CHUNK_SIZE, overlap=OVERLAP):
@@ -60,7 +61,7 @@ class RagIndex:
         m = np.array([v for v in vecs], dtype=np.float32)
         self.mat = m / (np.linalg.norm(m, axis=1, keepdims=True) + 1e-9)
 
-    def retrieve(self, question, k=3, embed_text=None):
+    def retrieve(self, question, k=RAG_TOP_K, embed_text=None):
         # embed_text overrides what we EMBED (not what we answer) — used by HyDE to embed a
         # hypothetical passage instead of the terse question. Default: embed the question.
         q = list(get_dense().embed([embed_text or question]))[0].astype(np.float32)
@@ -84,7 +85,7 @@ def hyde_passage(question, chat_fn=chat):
     return chat_fn(HYDE_PROMPT.format(q=question), system=HYDE_SYSTEM)
 
 
-def answer(question, index=None, k=3, chat_fn=chat, hyde=False):
+def answer(question, index=None, k=RAG_TOP_K, chat_fn=chat, hyde=False):
     index = index or RagIndex()
     # HyDE (opt-in): retrieve using question + hypothetical passage blended. Blending (not
     # pure-hypo) keeps a bad hypothetical from fully derailing retrieval — verified by eval.

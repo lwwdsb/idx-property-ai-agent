@@ -27,6 +27,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import type { SearchFilter } from '../search/filters.js';
 import type { LLMClient, ChatMessage } from '../llm/client.js';
+import { FACT_CONFIDENCE_THRESHOLD, SELECT_SEMANTIC, SELECT_EPISODIC } from '../tuning.js';
 
 const PREF_KEYS = ['city', 'beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft'] as const;
 type PrefKey = typeof PREF_KEYS[number];
@@ -171,7 +172,7 @@ export function learnFromFilter(profile: UserProfile, filter: SearchFilter): Use
 }
 
 /** High-confidence facts as a partial filter — soft defaults to fill missing fields. */
-export function preferredFilter(profile: UserProfile, threshold = 0.5): Partial<SearchFilter> {
+export function preferredFilter(profile: UserProfile, threshold = FACT_CONFIDENCE_THRESHOLD): Partial<SearchFilter> {
   const out: Partial<SearchFilter> = {};
   for (const key of PREF_KEYS) {
     const e = profile.prefs[key];
@@ -260,8 +261,8 @@ export async function selectMemories(
   llm?: LLMClient,
   limits: SelectLimits = {},
 ): Promise<MemoryEntry[]> {
-  const maxSem = limits.semantic ?? 5;   // generalized prefs: few, usually relevant
-  const maxEp = limits.episodic ?? 3;    // events: many, mostly irrelevant
+  const maxSem = limits.semantic ?? SELECT_SEMANTIC;   // generalized prefs: few, usually relevant
+  const maxEp = limits.episodic ?? SELECT_EPISODIC;    // events: many, mostly irrelevant
   if (!memories.length) return [];
   const capPerType = (list: MemoryEntry[]) => {
     const out: MemoryEntry[] = [];

@@ -17,14 +17,15 @@ from pydantic import BaseModel
 from fastembed.rerank.cross_encoder import TextCrossEncoder
 
 from common import get_dense, load_env
+from tuning import RERANK_COARSE, RERANK_ENABLED, SEARCH_TOP_K
 from rag import RagIndex, answer as rag_answer
 from recommend import validate_price, recommend as do_recommend, format_reco
 from search import hybrid_search, build_filter
 
 RERANK_MODEL = "Xenova/ms-marco-MiniLM-L-6-v2"   # small cross-encoder; L-12 gave no gain
-RERANK_COARSE = 20   # coarse pool -> CE rerank -> top-k. Swept on the 70-query graded set
-                     # (sweep_rerank_pool.py): 20 gains +0.14 nDCG@10 where 30 gains only
-                     # +0.06; past ~50 rerank turns negative (noise promoted from too deep).
+# RERANK_COARSE / RERANK_ENABLED / SEARCH_TOP_K now come from config/tuning.json
+# (shared.retrieval) so a sweep can change them without editing code. Provenance for the
+# current values is in config/README.md; the 70-query sweep put the pool at 20.
 
 # Example utterances per skill — the embedding intent classifier matches a message
 # against these (generalizes past regex). Kept small; embedded once at startup.
@@ -162,8 +163,8 @@ class SearchReq(BaseModel):
     min_beds: float | None = None
     pool: bool | None = None        # tri-state: True=has / False=no / None=don't care
     ptype: str | None = None        # physical L_Type_ value (e.g. "Condominium")
-    k: int = 5
-    rerank: bool = True             # coarse hybrid top-30 -> cross-encoder rerank -> top-k
+    k: int = SEARCH_TOP_K
+    rerank: bool = RERANK_ENABLED   # coarse pool -> cross-encoder rerank -> top-k
 
 
 @app.post("/search")

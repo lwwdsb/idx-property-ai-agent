@@ -14,9 +14,10 @@ import { query } from '../db.js';
 import { col } from '../../schema/columns.js';
 import { type ListingRow, mapListingRow } from './listingRow.js';
 import type { SearchFilter } from './filters.js';
+import { MAX_RESULTS as CAP, TOO_MANY as TOO_MANY_CAP } from '../tuning.js';
 
-export const MAX_RESULTS = 50;
-const TOO_MANY = 200;
+export const MAX_RESULTS = CAP;        // config/tuning.json -> shared.search
+const TOO_MANY = TOO_MANY_CAP;
 
 const RP = 'rets_property' as const;
 

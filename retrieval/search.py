@@ -9,6 +9,7 @@ import argparse
 from qdrant_client import models
 
 from common import COLLECTION, get_dense, get_qdrant, get_sparse
+from tuning import PREFETCH
 
 
 def build_filter(city=None, max_price=None, min_price=None, min_beds=None, pool=None, ptype=None):
@@ -26,7 +27,7 @@ def build_filter(city=None, max_price=None, min_price=None, min_beds=None, pool=
     return models.Filter(must=must) if must else None
 
 
-def hybrid_search(text, flt=None, k=5, mode="hybrid", prefetch=30):
+def hybrid_search(text, flt=None, k=5, mode="hybrid", prefetch=PREFETCH):
     client, dense, sparse = get_qdrant(), get_dense(), get_sparse()
     dvec = list(dense.embed([text]))[0].tolist()
     s = list(sparse.embed([text]))[0]

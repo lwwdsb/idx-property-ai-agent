@@ -20,7 +20,8 @@
     "test:all": "npm run typecheck && npm run test && npm run eval && npm run test:agent && npm run test:market && npm run test:orch && npm run test:wa && npm run test:email",
     "drafts": "tsx src/cli/drafts.ts",
     "typecheck": "tsc --noEmit",
-    "serve": "tsx src/server/orchestrateServer.ts"
+    "serve": "tsx src/server/orchestrateServer.ts",
+    "tune": "tsx src/cli/tune.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

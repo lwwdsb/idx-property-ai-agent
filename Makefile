@@ -50,6 +50,7 @@ down:           ## stop the app services (orchestrate + retrieval)
 eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant + LLM key)
 	$(PY) eval/runners/provenance.py
 	$(PY) eval/metrics/test_metrics.py
+	$(PY) eval/runners/objective_selftest.py
 	npx tsx eval/runners/evalIntentParse.ts
 	$(PY) eval/runners/report_intent_parse.py
 	npx tsx eval/runners/evalE2E.ts
@@ -71,6 +72,12 @@ eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant
 	$(PY) eval/runners/make_report.py
 	@echo "\n==> eval/report.md"
 	@$(PY) eval/runners/gate.py   # non-zero exit on a regression vs eval/baseline.json
+
+arm:            ## N repeats of the agent eval under the CURRENT config -> an arm (LABEL=x N=5)
+	$(PY) eval/runners/repeat_agent.py --label $(LABEL) --n $(or $(N),5)
+
+objective:      ## compare two arms: quality as constraint, tokens as objective (BASE=x CAND=y)
+	$(PY) eval/runners/objective.py --baseline $(BASE) --candidate $(CAND)
 
 eval-datasets:  ## rebuild the LLM-assisted labeled sets (retrieval); needs Qdrant + LLM key
 	$(PY) eval/runners/build_retrieval_set.py

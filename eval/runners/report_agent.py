@@ -95,6 +95,12 @@ def main():
             "steps_total": sum(c["steps"] for c in costs),
             # 0 when the provider returns no usage block — distinguishes "free" from "unmeasured".
             "usage_reported": bool(sum(c["totalTokens"] for c in costs)),
+            # PER TASK, because cost comparisons between two configs must be PAIRED. Task difficulty
+            # is the dominant variance source here (tokens_per_task_max swings 7.9% run to run
+            # against 1.7% for the mean), and pairing on task id removes all of it — the same 14
+            # tasks appear in both arms, so the only thing left varying is the config.
+            "per_task": {p["id"]: p["cost"]["totalTokens"] for p in preds if p.get("cost")},
+            "per_task_calls": {p["id"]: p["cost"]["llmCalls"] for p in preds if p.get("cost")},
         }
 
     self_sent = meta.get("selfSentTotal")

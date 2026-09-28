@@ -27,7 +27,22 @@
         取值 7269–11870ms）。**所以成本目标函数必须用 token，不能用延迟** —— 这是这次测量
         真正定下来的一个决定
       - 质量侧 `pass_rate` 五次全 1.0（饱和，如计划所述无法区分配置）；`completion.mean` CV 2.4%
-- [ ] **阶段 1.1**：成本目标函数落地（质量→硬约束，**成本→token**，不用延迟）
+- [x] **阶段 1.1 已完成**：成本目标函数落在 `eval/runners/objective.py`。
+      - **质量是约束不是权重**：`pass_rate` / `safety.self_sent` / `safety_ok` / `completion.mean`
+        任一破了直接 REJECT，**根本不查成本**——再大的省钱也买不到一次回归
+      - **成本比较是配对的**：同 14 条任务在两臂都跑，按任务 id 配对能消掉任务难度这个主方差源
+        （per-task CV 7.9% vs 均值 1.7%）；臂内取每任务的中位数，避免单次异常运行抬走一条任务
+      - **两道闸都要过才 ACCEPT**：配对符号检验 p<0.05 **且** 聚合差超过实测噪声带。
+        符号检验单独会把"14 条各省 20 token"判成显著——一致但毫无价值
+      - **四个结论**：REJECT / ACCEPT / INDISTINGUISHABLE / **INVALID**。
+        INVALID 是第四个：两臂跑的是同一配置却测出了差异 → 那是量具的假阳性，不是配置的效果。
+        **不能记成 INDISTINGUISHABLE**，否则 loop 会记下"试过这个配置没用"而其实什么都没试
+      - **A/A 实测**：同配置 3+3 → INDISTINGUISHABLE ✓。而聚合值显示 −84 tokens/任务（−1.4%），
+        朴素的单数字比较会把它报成胜利；两道闸都拦住了（p=0.55、−84 未过带 ±127）。
+        反方向也生效：`completion.mean` 1.86→1.84 靠带 ±0.1 避免了误 REJECT
+      - **自检 9/9**（`objective_selftest.py`，0 LLM，已进 `make eval`）。
+        **INVALID 这条就是自检抓出来的**：A/A 守卫原来只打印一条提示、结论仍是 ACCEPT
+      - 用法：`make arm LABEL=baseline N=5` / `make objective BASE=baseline CAND=候选`
 - [ ] **阶段 1.4**：扩 `agent.jsonl`，补需要 ≥3 步的任务（否则步数预算永远测不出来，
       顺带会打破质量饱和 → 基线要重设）
 - [ ] **阶段 2**：第一个 auto loop = `progressive` on/off

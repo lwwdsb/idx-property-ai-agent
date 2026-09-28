@@ -48,6 +48,7 @@ down:           ## stop the app services (orchestrate + retrieval)
 	bash scripts/stop-local.sh
 
 eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant + LLM key)
+	$(PY) eval/runners/manifest.py
 	$(PY) eval/runners/provenance.py
 	$(PY) eval/metrics/test_metrics.py
 	$(PY) eval/runners/objective_selftest.py
@@ -69,9 +70,16 @@ eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant
 	$(PY) eval/runners/eval_rag.py
 	$(PY) eval/runners/tune_retrieval.py
 	$(PY) eval/runners/bench_latency.py
+	npx tsx eval/runners/regression.ts
 	$(PY) eval/runners/make_report.py
 	@echo "\n==> eval/report.md"
 	@$(PY) eval/runners/gate.py   # non-zero exit on a regression vs eval/baseline.json
+
+pool:           ## regression pool — the boolean veto (fails if a pinned behaviour broke)
+	npx tsx eval/runners/regression.ts
+
+manifest:       ## check the frozen main sets have not changed without a version bump
+	$(PY) eval/runners/manifest.py
 
 arm:            ## N repeats of the agent eval under the CURRENT config -> an arm (LABEL=x N=5)
 	$(PY) eval/runners/repeat_agent.py --label $(LABEL) --n $(or $(N),5)

@@ -1,0 +1,94 @@
+{
+  "__doc__": "主集清单:每个基准评测集的【声明版本】+ 内容 sha + 行数。\n\n为什么需要它:指标是集上的平均值,所以【集一变,两次的数字就不可比】。本会话撞了两次 ——\nagent 集 14→21 让成本基线从 6049 变成 6449 并作废了已测的两个臂和噪声带;memory_select\n10→13 让 recall 从 0.792 掉到 0.697,看起来退化了 0.095 而实际什么都没退化。两次都是靠\n人推理才发现的,没有任何机制会拦。\n\n规则:内容 sha 变了而 version 没 bump → 门禁 FAIL。改集是【换尺子】,是一次显式、罕见、\n昂贵的动作:bump version、重测基线、重测噪声带、旧臂全部作废。把它变成必须手动确认的一步,\n正是为了让它不能顺手发生。\n\nfrozen=false 的集不受此约束(生成集/中间产物,本身就会重建)。",
+  "sets": {
+    "agent.jsonl": {
+      "version": 2,
+      "sha256_16": "152add413c46a0e2",
+      "lines": 21,
+      "frozen": true,
+      "note": "auto/agent 主集。2026-09-28 从 14 加到 21 条(补顺序依赖任务),因此 v2"
+    },
+    "e2e.jsonl": {
+      "version": 1,
+      "sha256_16": "97a7723ba4cb3db5",
+      "lines": 25,
+      "frozen": true
+    },
+    "intent.jsonl": {
+      "version": 1,
+      "sha256_16": "e34d0241e8a0543d",
+      "lines": 118,
+      "frozen": true
+    },
+    "memory_consolidate.jsonl": {
+      "version": 1,
+      "sha256_16": "764b71cd4d43d390",
+      "lines": 5,
+      "frozen": true
+    },
+    "memory_dynamics.jsonl": {
+      "version": 3,
+      "sha256_16": "228c399661de75ed",
+      "lines": 15,
+      "frozen": true,
+      "note": "L3 动态层。2026-09-27 从 10 加到 17 条(补情景动态 + 异名冲突),因此 v2"
+    },
+    "memory_facts.jsonl": {
+      "version": 1,
+      "sha256_16": "ca9975b126895b94",
+      "lines": 5,
+      "frozen": true
+    },
+    "memory_select.jsonl": {
+      "version": 2,
+      "sha256_16": "daba1ee29689309b",
+      "lines": 13,
+      "frozen": true,
+      "note": "L2 选择层。2026-09-28 从 10 加到 13 条(补注入上限生效区间),因此 v2"
+    },
+    "memory_utility.jsonl": {
+      "version": 1,
+      "sha256_16": "572f5cb141edb8c5",
+      "lines": 7,
+      "frozen": true
+    },
+    "mode_retrieval.jsonl": {
+      "version": 1,
+      "sha256_16": "f0b3ed16a7c52e25",
+      "lines": 44,
+      "frozen": true
+    },
+    "mode_retrieval_gen.jsonl": {
+      "version": 1,
+      "sha256_16": "3143795221b4378a",
+      "lines": 171,
+      "frozen": false,
+      "note": "生成集,会重建"
+    },
+    "parse.jsonl": {
+      "version": 1,
+      "sha256_16": "1e5733ff589565d8",
+      "lines": 40,
+      "frozen": true
+    },
+    "rag.jsonl": {
+      "version": 1,
+      "sha256_16": "e0f9e18c0865ef67",
+      "lines": 30,
+      "frozen": true
+    },
+    "retrieval.jsonl": {
+      "version": 1,
+      "sha256_16": "912e949c5dd49b51",
+      "lines": 24,
+      "frozen": true
+    },
+    "retrieval_large.jsonl": {
+      "version": 1,
+      "sha256_16": "201a0ebe18c1a824",
+      "lines": 70,
+      "frozen": true,
+      "note": "重建过一次(索引变更后重新池化)"
+    }
+  }
+}

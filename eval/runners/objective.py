@@ -54,6 +54,7 @@ from stats import sign_test          # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 ARMS = os.path.join(ROOT, "eval", "history", "arms")
 VARIANCE = os.path.join(ROOT, "eval", "variance.json")
+POOL_METRICS = os.path.join(ROOT, "eval", "history", "regression.metrics.json")
 
 # Quality constraints. (dotted path, kind, spec)
 #   "exact"     must equal the required value, every run, no baseline comparison. These are the
@@ -104,6 +105,30 @@ def decide(base, cand, variance, base_label="baseline", cand_label="candidate"):
     the ACCEPT and REJECT paths would otherwise never be exercised until the day they matter, and
     an unexercised decision rule is not a rule, it is an intention."""
     notes, broken = [], []
+
+    # THE REGRESSION POOL VETOES FIRST. It is boolean and cheap; the arms are numeric and
+    # expensive. Checking it here rather than leaving it to a human is the point — "no token saving
+    # buys a regression" has to be enforced by the thing that computes the verdict, not by
+    # remembering to look. A missing pool result is NOT treated as a pass: an unrun veto is an
+    # unknown, and an unknown must not clear a gate.
+    pool = None
+    if os.path.exists(POOL_METRICS):
+        try:
+            pool = json.load(open(POOL_METRICS, encoding="utf-8"))
+        except (OSError, ValueError):
+            pool = None
+    if pool is None:
+        notes.append("regression pool: no result found — run `make pool` before trusting a verdict")
+        broken.append("regression pool NOT RUN (an unrun veto is an unknown, not a pass)")
+    elif pool.get("veto"):
+        mh = pool.get("must_hold", {})
+        broken.append(f"regression pool VETO: {mh.get('broken', '?')} pinned behaviour(s) broken"
+                      + (f", {pool['unsupported']} case(s) unsupported" if pool.get("unsupported") else ""))
+    else:
+        mh, dg = pool.get("must_hold", {}), pool.get("documented_gap", {})
+        notes.append(f"regression pool clear: {mh.get('held', 0)}/{mh.get('n', 0)} pinned behaviours held"
+                     + (f", {dg.get('changed')} documented gap(s) CHANGED — check whether one got fixed"
+                        if dg.get("changed") else ""))
 
     # Same-config guard: comparing two arms that ran the same config is an A/A test, which is a
     # legitimate and useful thing to do, but it must be labelled as one rather than reported as a

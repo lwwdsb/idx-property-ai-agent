@@ -8,7 +8,7 @@ import { rmSync } from 'node:fs';
 import {
   freshProfile, learnFromFilter, preferredFilter, saveFacts, saveMemories, saveUsage, loadProfile, renderMd,
   addMemory, touchMemory, selectMemories, semanticMemories, episodicMemories, profileHint,
-  compactMemories, forgetMemory,
+  compactMemories, forgetMemory, memoryDerivedFilter, slotConflicts,
 } from './profile.js';
 import type { SearchFilter } from '../search/filters.js';
 
@@ -150,6 +150,49 @@ await check('split store: the two writers do not clobber each other', () => {
   assert.equal(merged.prefs.beds!.value, 3, 'latest fact write wins');
   assert.equal(merged.memories.length, 1, 'memory survives a facts-only write');
   assert.equal(merged.lastConsolidatedRunId, 7, 'watermark survives too');
+  clean();
+});
+
+await check('round-trip: declared slots and usage counters survive a reload', () => {
+  const uid = 'test-roundtrip-user';
+  const clean = () => { for (const x of ['facts.json', 'memories.json', 'usage.json', 'md']) rmSync(`data/profiles/${uid}.${x}`, { force: true }); };
+  clean();
+  // SLOTS ARE THE WHOLE DETERMINISTIC CHANNEL NOW. memoryDerivedFilter reads declared slots and
+  // nothing else — prose is not parsed — so a slot lost on reload does not degrade the filter, it
+  // silently empties it, and the memory still LOOKS intact in profile.md. The existing round-trip
+  // case predates the field and stores a memory without any, so nothing covered this.
+  const w = freshProfile(uid);
+  addMemory(w, { name: 'wants-pool', description: 'd', type: 'semantic', content: '要带泳池',
+    slots: { pool: true, maxPrice: 2_000_000 } as never });
+  saveMemories(w);
+  touchMemory(w, 'wants-pool');
+  touchMemory(w, 'wants-pool');
+  saveUsage(w);
+
+  const r = loadProfile(uid);
+  assert.deepEqual(r.memories[0]!.slots, { pool: true, maxPrice: 2_000_000 }, 'slots survive the reload');
+  assert.deepEqual(memoryDerivedFilter(r.memories), { pool: true, maxPrice: 2_000_000 },
+    'and still reach the deterministic filter after a reload');
+  // usage lives in its own file written by the chat path; the reload has to re-attach it by name.
+  assert.equal(r.memories[0]!.useCount, 2, 'usage counters survive and re-attach');
+  clean();
+});
+
+await check('a cross-name slot contradiction survives reload AND keeps the field silent', () => {
+  const uid = 'test-conflict-user';
+  const clean = () => { for (const x of ['facts.json', 'memories.json', 'usage.json', 'md']) rmSync(`data/profiles/${uid}.${x}`, { force: true }); };
+  clean();
+  // The conflict is derived, not stored, so it has to be re-derived after a reload. If it were not,
+  // a restart would resurrect the arbitrary first-writer-wins resolution this replaced.
+  const w = freshProfile(uid);
+  addMemory(w, { name: 'wants-pool', description: 'd', type: 'semantic', content: '要泳池', slots: { pool: true } as never });
+  addMemory(w, { name: 'no-pool-please', description: 'd', type: 'semantic', content: '不要泳池', slots: { pool: false } as never });
+  saveMemories(w);
+
+  const r = loadProfile(uid);
+  assert.equal(r.memories.length, 2, 'both memories survive — neither is deleted on a heuristic');
+  assert.equal(slotConflicts(r.memories).length, 1, 'the contradiction is re-detected after reload');
+  assert.deepEqual(memoryDerivedFilter(r.memories), {}, 'and the conflicted field stays silent');
   clean();
 });
 

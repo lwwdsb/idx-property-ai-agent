@@ -16,16 +16,30 @@
  *                         ordering ties and the probe fails. This is not hypothetical: `confidence`
  *                         used to be a field nothing consumed, and only a code read found it.
  *
+ *   CROSS-NAME CONTRADICTION  md-009 used to be a KNOWN GAP: two memories with opposite content
+ *                         under different names, which no deterministic rule caught. It is now
+ *                         CLOSED — not by reading the prose (parsing it produced an inversion on
+ *                         this very pair) but by comparing the slots each memory DECLARES, which
+ *                         is name-independent by construction. The assertions are two-part: the
+ *                         conflict is detected, AND the conflicted field stops seeding searches.
+ *                         Both memories still survive; deleting one on a heuristic is not the
+ *                         deterministic layer's call.
+ *   EPISODIC DYNAMICS     merge/conflict are keyed on NAME alone, so they should be type-agnostic;
+ *                         md-013/014 assert that for episodics, which would otherwise rest on the
+ *                         assumption that nobody special-cases semantic later. md-012/015 pin the
+ *                         type SCOPING of conflict detection in both directions.
+ *
  * KNOWN GAPS are reported but excluded from the pass rate (same discipline as the completion
- * self-judge not gating). md-009 asserts CURRENT behaviour for a cross-name contradiction —
- * two memories with opposite content under different names, which no deterministic rule catches.
- * If someone later adds deterministic resolution, that case fails and the eval says so, which is
- * the point: the gap is recorded rather than forgotten.
+ * self-judge not gating). What remains a gap is now narrower and stated as such: a contradiction
+ * that exists ONLY in prose, between memories that declared no slots (md-011), and a same-name
+ * re-add that asks for a different type (md-017). If someone later closes either, that case fails
+ * and the eval says so — the gap is recorded rather than forgotten.
  *
  *   npx tsx eval/runners/evalMemoryDynamics.ts
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { freshProfile, addMemory, touchMemory, compactMemories, type UserProfile } from '../../src/memory/profile.js';
+import { freshProfile, addMemory, touchMemory, compactMemories, slotConflicts, memoryDerivedFilter,
+  type UserProfile } from '../../src/memory/profile.js';
 
 const HERE = new URL('.', import.meta.url).pathname;
 const cases = readFileSync(`${HERE}../datasets/memory_dynamics.jsonl`, 'utf8')
@@ -50,7 +64,8 @@ function run(ops: any[], p: UserProfile) {
   for (const o of ops) {
     if (o.op === 'add') {
       p = addMemory(p, { name: o.name, description: o.description ?? 'd', type: o.type,
-        content: o.content, salience: o.salience, sourceRuns: o.sourceRuns, mergedFrom: o.mergedFrom });
+        content: o.content, salience: o.salience, sourceRuns: o.sourceRuns, mergedFrom: o.mergedFrom,
+        slots: o.slots });
     } else if (o.op === 'touch') {
       // touchMemory mutates in place and does NOT return the profile — reassigning its
       // result wiped the profile on the first call.
@@ -101,6 +116,26 @@ for (const c of cases) {
   if (e.rank_order_differs === true) {
     const [a, b] = (e.score_order as string[]).map((n) => byName.get(n)!);
     checks.rank_differs = score(a) > score(b) && !(rankOnly(a) > rankOnly(b));
+  }
+  // CROSS-NAME CONTRADICTION, detected off DECLARED slots (never off prose — see slotConflicts).
+  // Expected as [{type, field}] pairs; order-insensitive.
+  if (e.conflicts !== undefined) {
+    const got = slotConflicts(p.memories).map((c) => `${c.type}.${c.field}`).sort();
+    const want = (e.conflicts as Array<{ type: string; field: string }>)
+      .map((c) => `${c.type}.${c.field}`).sort();
+    checks.conflicts = JSON.stringify(got) === JSON.stringify(want);
+  }
+  // What the deterministic channel actually seeds. The point of most conflict cases is not that
+  // a conflict was NOTICED but that the conflicted field stops reaching a search at all.
+  if (e.derived_filter !== undefined) {
+    const got = memoryDerivedFilter(p.memories) as Record<string, unknown>;
+    const want = e.derived_filter as Record<string, unknown>;
+    const keys = [...new Set([...Object.keys(got), ...Object.keys(want)])];
+    checks.derived_filter = keys.every((k) => JSON.stringify(got[k]) === JSON.stringify(want[k]));
+  }
+  if (e.types !== undefined) {
+    checks.types = Object.entries(e.types as Record<string, string>)
+      .every(([n, t]) => byName.get(n)?.type === t);
   }
   if (e.idempotent === true) {
     const before = p.memories.map((m) => m.name).sort().join(',');

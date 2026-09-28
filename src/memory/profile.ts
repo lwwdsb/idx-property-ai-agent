@@ -231,6 +231,14 @@ export const episodicMemories = (p: UserProfile) => p.memories.filter((m) => m.t
 /** Lightweight index (name+desc+type) — what a model reads to decide what to load. */
 export const memoryIndex = (p: UserProfile) => p.memories.map((m) => ({ name: m.name, description: m.description, type: m.type }));
 
+/** What `list_memories` hands the consolidation agent: the index PLUS any detected contradiction.
+ * The deterministic layer can only refuse to use a conflicted field; deciding which claim is
+ * right needs the sessions, so the conflict is put in front of the one agent that reads them. */
+export const memoryIndexWithConflicts = (p: UserProfile) => ({
+  memories: memoryIndex(p),
+  conflicts: slotConflicts(p.memories),
+});
+
 function daysSince(iso: string): number {
   return Math.max(0, (Date.now() - new Date(iso).getTime()) / 86_400_000);
 }
@@ -441,11 +449,68 @@ const MEMORY_SLOTS = ['maxPrice', 'minPrice', 'beds', 'baths', 'propertyType', '
  * facts are injected without consulting the selector either. Staleness is handled downstream:
  * executeTool merges the model's own args OVER these, so a value stated this turn always wins.
  */
+export interface SlotConflict {
+  type: MemoryType;
+  field: string;
+  /** memory name -> the value it declares. Always 2+ distinct values. */
+  claims: Record<string, unknown>;
+}
+
+/**
+ * The deterministic net for CROSS-NAME contradiction.
+ *
+ * Same-name contradiction has always been resolvable: the second write is the same memory being
+ * updated, so the new content replaces the old. Two memories with DIFFERENT names claiming
+ * opposite things had no net at all — `wants-pool` ("买家坚持要带泳池") and `no-pool-please`
+ * ("买家明确说不要泳池") both survived, and naming discipline was load-bearing.
+ *
+ * WHY THIS COMPARES SLOTS AND NOT PROSE. Reading the contradiction out of the two descriptions is
+ * the one approach already disproven here: prose routinely negates the opposite of what it means,
+ * and parsing it produced an INVERSION on the very example above (see memoryDerivedFilter's note).
+ * A declared slot is the writer's own structured statement, so `{pool: true}` vs `{pool: false}`
+ * is a contradiction by construction — no language understanding needed, and no name involved.
+ *
+ * Scoped WITHIN a type on purpose. A semantic memory states a standing requirement; an episodic
+ * records what happened. "看过带泳池那套" does not contradict "不要泳池" — the first is an event,
+ * the second a preference, and cross-type pairs are not contradictions at all.
+ *
+ * What this DOESN'T catch, stated so the boundary is not mistaken for coverage: a contradiction
+ * that exists only in prose, between memories that declared no slots. That one still needs the
+ * consolidation sub-agent, which is why conflicts are also surfaced to it (see memoryIndex).
+ */
+export function slotConflicts(memories: MemoryEntry[]): SlotConflict[] {
+  const out: SlotConflict[] = [];
+  for (const type of ['semantic', 'episodic'] as MemoryType[]) {
+    for (const field of MEMORY_SLOTS) {
+      const claims: Record<string, unknown> = {};
+      for (const m of memories) {
+        if (m.type !== type || !m.slots) continue;
+        const v = (m.slots as Record<string, unknown>)[field];
+        if (v !== undefined && v !== null) claims[m.name] = v;
+      }
+      const distinct = new Set(Object.values(claims).map((v) => JSON.stringify(v)));
+      if (distinct.size > 1) out.push({ type, field, claims });
+    }
+  }
+  return out;
+}
+
 export function memoryDerivedFilter(memories: MemoryEntry[]): Partial<SearchFilter> {
+  // A CONFLICTED FIELD GOES SILENT. Without this the loop below resolved a contradiction by
+  // array order — whichever memory happened to be earlier won, which is not a decision, it is an
+  // accident that changes when the file is rewritten. Silence follows the precedent already set
+  // for facts: holding the old value is stale, jumping to the other one over-trusts a single
+  // record, and there is no supersession link between two separately-named memories to justify
+  // either. The user's own words this turn still reach the filter (executeTool merges the
+  // model's args over the seed), so silence costs a default, never a stated constraint.
+  const conflicted = new Set(
+    slotConflicts(memories).filter((c) => c.type === 'semantic').map((c) => c.field),
+  );
   const out: Record<string, unknown> = {};
   for (const m of memories) {
     if (m.type !== 'semantic' || !m.slots) continue;
     for (const k of MEMORY_SLOTS) {
+      if (conflicted.has(k)) continue;
       const v = (m.slots as Record<string, unknown>)[k];
       if (out[k] === undefined && v !== undefined && v !== null) out[k] = v;
     }

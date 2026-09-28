@@ -19,7 +19,7 @@
 import type { LLMClient, ChatMessage, ToolSpec } from '../llm/client.js';
 import type { AgentRunStore } from '../agent/auto/runStore.js';
 import { logger } from '../logger.js';
-import { loadProfile, saveMemories, addMemory, forgetMemory, compactMemories, memoryIndex, type MemoryType } from './profile.js';
+import { loadProfile, saveMemories, addMemory, forgetMemory, compactMemories, memoryIndexWithConflicts, type MemoryType } from './profile.js';
 
 /** The memory capability domain — a whitelist DISJOINT from the business tool set. */
 export const MEMORY_TOOLS: ToolSpec[] = [
@@ -31,7 +31,9 @@ export const MEMORY_TOOLS: ToolSpec[] = [
   },
   {
     name: 'list_memories',
-    description: 'List memories already stored (name + description + type), to avoid duplicates.',
+    description: 'List memories already stored (name + description + type), to avoid duplicates. '
+      + 'Also returns `conflicts`: memories that DECLARE contradictory values for the same field. '
+      + 'A conflicted field is currently UNUSABLE by search until you resolve it.',
     parameters: { type: 'object', properties: {} },
   },
   {
@@ -84,6 +86,12 @@ const SYSTEM = [
   'parsed, so a constraint that only exists in the prose never reaches a search.',
   'CONSOLIDATE when useful: if several episodics point to one durable preference, add_memory a',
   'semantic (list them in mergedFrom) and forget_memory the redundant episodics.',
+  'RESOLVE DECLARED CONFLICTS FIRST: list_memories returns a `conflicts` array whenever two',
+  'memories declare contradictory values for the same field (e.g. one says pool=true, another',
+  'pool=false). A conflicted field is DROPPED from search entirely until one claim is left, so',
+  'leaving it unresolved silently disables that filter. Decide from the recent sessions which',
+  'claim still holds, then forget_memory the wrong one (or add_memory with the surviving name and',
+  'corrected slots). Do not resolve it by deleting both.',
   'RESOLVE CONFLICTS explicitly: after list_memories, compare EACH stored memory against the',
   'recent sessions. If a stored memory is CONTRADICTED by newer behavior (e.g. stored "cares',
   'about schools" but recent sessions ignore schools), the NEWER signal wins (recency): either',
@@ -112,7 +120,7 @@ function makeExecutor(userId: string, runStore: AgentRunStore, since: number) {
       }).join('\n\n').slice(0, 4000);
     }
     if (name === 'list_memories') {
-      return JSON.stringify(memoryIndex(loadProfile(userId)));
+      return JSON.stringify(memoryIndexWithConflicts(loadProfile(userId)));
     }
     if (name === 'add_memory') {
       const profile = loadProfile(userId);

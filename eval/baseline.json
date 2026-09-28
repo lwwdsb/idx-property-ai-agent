@@ -161,13 +161,13 @@
       "label": "memory injection precision",
       "value": 1.0,
       "direction": "up",
-      "n": 10
+      "n": 13
     },
     "memory_select.metrics.json:arms.llm.recall": {
       "label": "memory injection recall",
-      "value": 0.7917,
+      "value": 0.697,
       "direction": "up",
-      "n": 10
+      "n": 13
     },
     "memory_dynamics.metrics.json:pass_rate": {
       "label": "memory dynamics pass rate",

@@ -33,7 +33,7 @@ export interface Tuning {
   deterministic: { intent: { embedThreshold: number; embedMargin: number } };
   auto: {
     loop: { maxSteps: number; maxPerTool: number; progressive: boolean };
-    memory: { selectSemantic: number; selectEpisodic: number };
+    memory: { selectSemantic: number; selectEpisodic: number; fallbackSemantic: number; fallbackEpisodic: number };
   };
 }
 
@@ -76,5 +76,25 @@ export const MAX_PER_TOOL = tuning.auto.loop.maxPerTool;
  * be reported as INVALID. Putting the flag in the config is what makes the arms distinguishable.
  */
 export const PROGRESSIVE = tuning.auto.loop.progressive;
+/**
+ * How many memories may be INJECTED, capped per type. Two caps, not one, because the cap does a
+ * completely different job on each of the two selection paths — measured 2026-09-28 on the 13-case
+ * memory_select set at (3,1) / (5,3) / (8,5), three runs each:
+ *
+ *   LLM path       precision 1.000 and over-selections 0 at every cap, so the cap never removes a
+ *                  wrong pick — it only ever clips a CORRECT one. Recall rose 0.671 -> 0.697 and
+ *                  exact 0.538 -> 0.615 going from (5,3) to (8,5), at a cost of ~14 tokens per
+ *                  admitted memory, i.e. about 2 tokens per request. So this cap should be LOOSE:
+ *                  the selector's own precision is the real control here.
+ *   FALLBACK path  no LLM, ranks by salience x recency x frequency and fills the cap regardless of
+ *                  the task, so the cap is the ONLY thing bounding misinjection. Over-selections
+ *                  went 26 -> 35 -> 39 across the same three settings, with probe precision 0.000
+ *                  throughout (it injects on greetings and out-of-domain requests too). So this cap
+ *                  should be TIGHT.
+ *
+ * One number cannot satisfy both, and it was previously loose where it needed to be tight.
+ */
 export const SELECT_SEMANTIC = tuning.auto.memory.selectSemantic;
 export const SELECT_EPISODIC = tuning.auto.memory.selectEpisodic;
+export const FALLBACK_SEMANTIC = tuning.auto.memory.fallbackSemantic;
+export const FALLBACK_EPISODIC = tuning.auto.memory.fallbackEpisodic;

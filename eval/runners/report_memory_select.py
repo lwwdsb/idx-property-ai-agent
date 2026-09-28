@@ -2,12 +2,20 @@
 
 Gold is human-labelled and the metric is set overlap, so nothing here depends on an LLM judge.
 
-EMPTY-GOLD CASES NEED AN EXPLICIT RULE, because precision over an empty gold set is otherwise
-undefined: for a greeting or an out-of-domain request the correct answer is to select NOTHING,
-so precision is 1 when nothing was selected and 0 otherwise, and recall is not defined at all
-(there is nothing to recall) and is excluded from the recall average. Stating this matters —
-scoring those cases as "no relevant items, so trivially perfect" would hide exactly the failure
-they were written to catch.
+BOTH EMPTY SIDES NEED AN EXPLICIT RULE, because each makes one of the two metrics 0/0.
+
+EMPTY GOLD (a greeting, an out-of-domain request): the correct answer is to select NOTHING, so
+precision is 1 when nothing was selected and 0 otherwise, and recall is undefined (there is nothing
+to recall) and excluded from the recall average. Stating this matters — scoring those cases as "no
+relevant items, so trivially perfect" would hide exactly the failure they were written to catch.
+
+EMPTY SELECTION against a non-empty gold: precision is UNDEFINED (0/0) and excluded from the
+precision average; the failure is fully carried by recall = 0 and missed = len(gold). It used to be
+scored 0.0, which double-counted one error in two metrics and made precision uninterpretable — a
+fallen precision could mean "selected wrong things" OR "selected nothing", which are opposite
+defects with opposite fixes. The symptom was a reading of precision 0.923 alongside
+over_selected_total 0, which cannot both be true under the ordinary definition. Empty selections
+are counted in their own field instead, so nothing is hidden.
 
   python eval/runners/report_memory_select.py
 """
@@ -31,10 +39,11 @@ def score(selected, gold):
         return {"precision": 1.0 if not s else 0.0, "recall": None,
                 "exact": 1.0 if not s else 0.0, "extra": len(s), "missed": 0}
     hit = len(s & g)
-    return {"precision": hit / len(s) if s else 0.0,
+    return {"precision": (hit / len(s)) if s else None,   # 0/0 -> undefined, not 0
             "recall": hit / len(g),
             "exact": 1.0 if s == g else 0.0,
-            "extra": len(s - g), "missed": len(g - s)}
+            "extra": len(s - g), "missed": len(g - s),
+            "empty_selection": not s}
 
 
 def main():
@@ -54,17 +63,29 @@ def main():
         sc = [score(p[arm], p["gold"]) for p in preds]
         scn = [score(p[arm], p["gold"]) for p in normal]
         scp = [score(p[arm], p["gold"]) for p in probes]
+        # mean() over the DEFINED values only. `recall` is already filtered by using `normal`
+        # (empty-gold probes have no recall); `precision` now needs the same treatment for the
+        # other 0/0 case — an empty selection against a non-empty gold. Both exclusions are
+        # counted and printed rather than silently dropped.
+        prec = [x["precision"] for x in sc if x["precision"] is not None]
+        empties = sum(1 for x in sc if x.get("empty_selection") and x["precision"] is None)
         row = {
-            "precision": round(mean([x["precision"] for x in sc]), 4),
+            "precision": round(mean(prec), 4) if prec else None,
+            "precision_n": len(prec),
             "recall": round(mean([x["recall"] for x in scn]), 4),
             "exact_match": round(mean([x["exact"] for x in sc]), 4),
             "probe_precision": round(mean([x["precision"] for x in scp]), 4) if scp else None,
             "over_selected_total": sum(x["extra"] for x in sc),
             "missed_total": sum(x["missed"] for x in sc),
+            # An empty selection is a real failure; it is excluded from precision (undefined) but
+            # never from view. recall and missed already carry its cost.
+            "empty_selections": empties,
         }
         out["arms"][arm] = row
         print(f"  {arm:10} {row['precision']:>10.3f} {row['recall']:>8.3f} {row['exact_match']:>7.3f}"
-              f" {row['probe_precision']:>9.3f} {row['over_selected_total']:>12} {row['missed_total']:>7}")
+              f" {row['probe_precision']:>9.3f} {row['over_selected_total']:>12} {row['missed_total']:>7}"
+              + (f"   (precision over {row['precision_n']}/{len(sc)} cases;"
+                 f" {row['empty_selections']} empty selection(s) undefined)" if row["empty_selections"] else ""))
 
     # Paired: does the LLM arm beat the free fallback, case by case? An unpaired mean difference
     # on 10 cases would be meaningless.

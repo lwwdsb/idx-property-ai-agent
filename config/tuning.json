@@ -33,8 +33,10 @@
       "progressive": false
     },
     "memory": {
-      "selectSemantic": 5,
-      "selectEpisodic": 3
+      "selectSemantic": 8,
+      "selectEpisodic": 5,
+      "fallbackSemantic": 3,
+      "fallbackEpisodic": 1
     }
   }
 }

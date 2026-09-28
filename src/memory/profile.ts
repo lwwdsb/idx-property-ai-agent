@@ -27,7 +27,8 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import type { SearchFilter } from '../search/filters.js';
 import type { LLMClient, ChatMessage } from '../llm/client.js';
-import { FACT_CONFIDENCE_THRESHOLD, SELECT_SEMANTIC, SELECT_EPISODIC } from '../tuning.js';
+import { FACT_CONFIDENCE_THRESHOLD, SELECT_SEMANTIC, SELECT_EPISODIC,
+  FALLBACK_SEMANTIC, FALLBACK_EPISODIC } from '../tuning.js';
 
 const PREF_KEYS = ['city', 'beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft'] as const;
 type PrefKey = typeof PREF_KEYS[number];
@@ -360,7 +361,22 @@ export async function selectMemories(
     }
     return out;
   };
-  const byRank = () => capPerType([...memories].sort((a, b) => rank(b) - rank(a)));
+  // The fallback gets its OWN, tighter caps. It ranks by salience x recency x frequency without
+  // looking at the task at all, so it fills whatever cap it is given with memories that may have
+  // nothing to do with the request — measured over-selections 26 / 35 / 39 at caps (3,1) / (5,3) /
+  // (8,5), probe precision 0.000 throughout. On the LLM path the cap only ever clips a CORRECT
+  // pick (precision 1.000, over-selections 0), so the two paths want opposite settings and one
+  // number was serving both.
+  const capFallback = (list: MemoryEntry[]) => {
+    const out: MemoryEntry[] = [];
+    let sem = 0, ep = 0;
+    for (const m of list) {
+      if (m.type === 'semantic') { if (sem < (limits.semantic ?? FALLBACK_SEMANTIC)) { out.push(m); sem += 1; } }
+      else if (ep < (limits.episodic ?? FALLBACK_EPISODIC)) { out.push(m); ep += 1; }
+    }
+    return out;
+  };
+  const byRank = () => capFallback([...memories].sort((a, b) => rank(b) - rank(a)));
   if (!llm?.chatWithTools) return byRank();
   const index = memories.map((m, i) => `${i}: [${m.type}] [${m.name}] ${m.description}`).join('\n');
   const turn = await llm.chatWithTools([
@@ -370,7 +386,14 @@ export async function selectMemories(
   const idx = jsonArray(turn.content);
   if (idx === null) return byRank();          // unparseable -> degrade to the deterministic rank
   const picked = idx.filter((i) => memories[i]).map((i) => memories[i]!);
-  return capPerType(picked);                  // an EMPTY selection is a valid answer, not a failure
+  // Sorted by rank BEFORE capping. The cap used to truncate in the order the model happened to
+  // emit its indices, while the fallback path truncated by rank — so the two arms of this same
+  // function disagreed about which memory to sacrifice, and the LLM arm sacrificed by accident
+  // rather than by decision. It never showed up because the cap only binds when a profile holds
+  // more relevant memories than the cap admits, and no eval profile was ever that large (biggest:
+  // 4 semantic against a cap of 5, while STORAGE allows 30). Same shape as the array-order bug in
+  // memoryDerivedFilter: an arbitrary order standing in for a policy.
+  return capPerType([...picked].sort((a, b) => rank(b) - rank(a)));   // [] is a valid answer
 }
 
 /** Delete a memory by name (used for consolidation: superseded/contradicted/redundant). */

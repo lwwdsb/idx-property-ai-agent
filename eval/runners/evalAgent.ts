@@ -137,7 +137,10 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
       calls: [] as Array<{ tool: string; filter: Record<string, unknown> }>,
       runId: undefined as number | undefined };
     try {
-      r1 = await runAgent(c.task, { userId: operator, registry, llm, store: runStore, progressive: false });
+      // progressive is NOT passed: it comes from config/tuning.json, the same place production
+      // reads it. It used to be hardcoded false here while entry.ts defaulted it to true, so this
+      // eval had never once measured the configuration production actually runs.
+      r1 = await runAgent(c.task, { userId: operator, registry, llm, store: runStore });
       res = { toolsUsed: [...new Set(r1.trace.filter((t) => t.tool).map((t) => t.tool as string))],
         stopReason: r1.stopReason, steps: r1.steps, reply: r1.reply, runId: r1.runId,
         calls: r1.trace.filter((t) => t.tool).map((t) => ({

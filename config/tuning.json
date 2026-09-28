@@ -29,7 +29,8 @@
   "auto": {
     "loop": {
       "maxSteps": 8,
-      "maxPerTool": 3
+      "maxPerTool": 3,
+      "progressive": false
     },
     "memory": {
       "selectSemantic": 5,

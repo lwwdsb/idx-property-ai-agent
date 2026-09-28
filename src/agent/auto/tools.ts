@@ -51,9 +51,20 @@ export function toolSpecs(registry: SkillRegistry): ToolSpec[] {
 }
 
 // ── Progressive tool loading (deferred-tool style) ─────────────────────────────
-/** The meta-tool: in progressive mode it's the ONLY tool exposed up front. The agent
- * calls it to discover + ENABLE the real tools it needs, so the prompt isn't preloaded
- * with every schema (same idea as this environment's ToolSearch over deferred tools). */
+/** The meta-tool: in progressive mode it's the ONLY tool exposed up front. The agent calls it to
+ * discover + ENABLE the real tools it needs, so the prompt isn't preloaded with every schema (same
+ * idea as this environment's ToolSearch over deferred tools).
+ *
+ * MEASURED 2026-09-28, AND IT LOSES AT THIS SCALE — progressive is now off by default. It saves the
+ * schema bulk on the turns BEFORE discovery, but once find_tools enables the tools their schemas
+ * ride along on every later turn anyway, so the saving is worth roughly one turn of schemas
+ * (5 tools = 1659 tokens) while the discovery call ADDS a whole turn, and in a ReAct loop an extra
+ * turn re-sends the entire transcript (~1350 prompt tokens/task measured; prompt is 92% of spend).
+ * Net +1481 tokens/task, 16x the noise band, p=0.0072. Save one turn's schemas, pay one whole turn.
+ *
+ * The verdict is CONDITIONAL on the registry being small. Growing the tool set or the schemas moves
+ * the preloaded bulk up while the cost of one extra turn stays roughly flat, so this flips at some
+ * point — re-run the arms (config/README.md records how) rather than assuming either way. */
 export const FIND_TOOLS_SPEC: ToolSpec = {
   name: 'find_tools',
   description: 'Discover available tools by keyword and ENABLE them for you to call. Returns '

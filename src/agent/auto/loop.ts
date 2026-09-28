@@ -16,6 +16,7 @@
  * per-tool call cap.
  */
 import { logger } from '../../logger.js';
+import { PROGRESSIVE } from '../../tuning.js';
 import type { LLMClient, ChatMessage, ToolSpec, ChatTurn } from '../../llm/client.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 import { toolSpecs, executeTool, FIND_TOOLS_SPEC, findTools } from './tools.js';
@@ -248,7 +249,7 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
 export async function runAgent(task: string, opts: RunAgentOptions): Promise<AgentResult> {
   const { userId, registry, llm } = opts;
   if (!llm.chatWithTools) throw new Error('auto mode needs an LLM with tool-calling (chatWithTools)');
-  const progressive = opts.progressive ?? false;
+  const progressive = opts.progressive ?? PROGRESSIVE;   // one default, from config
   const store = opts.store ?? new MySqlAgentRunStore();
   const activeToolNames = progressive ? [FIND_TOOLS_SPEC.name] : toolSpecs(registry).map((t) => t.name);
   const mem0 = freshMemory();

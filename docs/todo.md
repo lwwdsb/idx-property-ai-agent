@@ -82,8 +82,21 @@ agent 起草了、挂起了、断言全过。是 a-017(要求"只发最大那一
 - [x] agent 集加了 `known_gap` 机制(与 `memory_dynamics` 同纪律):缺口的断言照跑但不计入
       `pass_rate`。否则它会永久红着让门禁不可用,或者被悄悄删掉 —— 而删掉正是这类缺陷
       六周后被重新发现的方式
-- [ ] **阶段 2**：第一个 auto loop = `progressive` on/off
-      它同时影响步数（少一步 find_tools）和 token（多几份 schema），方向相反，推不出来必须测
+- [x] **阶段 2 已完成 —— 第一个真 loop 跑出了 ACCEPT**：`progressive` on/off。
+      **结论:关掉。省 1481 tokens/任务(−18.8%)**,噪声带的 16 倍,21 条里 17 条更便宜
+      (配对符号检验 **p=0.0072**),质量未退(pass_rate 1.0、`completion.mean` 1.857→1.887)。
+      配置已改为 `false`(可 `npm run tune -- rollback` 回滚)。
+      - **机制**(不只看聚合值):开启时每任务多约 **1.1 个回合**(21 任务多 23 次 LLM 调用),
+        而 ReAct 里多一个回合就要**把整段对话重发**(+28317 prompt token/21 任务 ≈ 1350/任务;
+        **prompt 占全部 token 的 92%**,成本由上下文重发主导而非生成)。它省下的 schema 只在
+        **发现之前**那一个回合有效 —— `find_tools` 启用后那些 schema 照样进后面每个回合。
+        **省一个回合的 schema,付一整个回合。** 5 个工具 schema 合计 1659 tokens/回合(均 332)
+      - ⚠️ **条件结论**:工具数/schema 体积显著增长后**要重测** —— 预载体积一旦超过多一个回合
+        的代价,结论会翻过来。这不是"渐进加载没用",是"5 个工具时没用"
+      - 🔴 **顺带发现第 5 次"测了不存在的路"**:`entry.ts` 默认 `progressive ?? true`(生产)、
+        `loop.ts` 默认 `?? false`、`evalAgent` 硬编码 `false` —— **agent 评测从来没测过生产
+        实际跑的配置**,而且同一个开关有三处不同默认。已收口到 `config/tuning.json` 唯一来源
+        (也正好让两臂的 `tuning_sha` 不同,目标函数的 `INVALID` 守卫依赖它)
 - [ ] **阶段 3**：记忆参数 `selectSemantic` / `selectEpisodic` —— 依赖下面的记忆评测
 
 ## 二、记忆评测体系（进行中）

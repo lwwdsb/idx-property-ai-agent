@@ -12,6 +12,7 @@
  * gate is deterministic CODE, never an LLM tool (丙).
  */
 import { approveAndSend, cancelDraft, type SendFn } from '../../email/email.js';
+import { PROGRESSIVE } from '../../tuning.js';
 import type { DraftStore } from '../../email/drafts.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 import type { LLMClient } from '../../llm/client.js';
@@ -112,7 +113,7 @@ export async function handleAgentMessage(
     if (learned) saveFacts(profile);
     if (selected.length) saveUsage(profile);
     const res = await runAgent(task, {
-      userId, registry, llm, store: runStore, progressive: deps.progressive ?? true,
+      userId, registry, llm, store: runStore, progressive: deps.progressive ?? PROGRESSIVE,
       profileHint: profileHint(profile, selected), seedFilter: seedFilterFor(profile, selected),
     });
     return res.reply;

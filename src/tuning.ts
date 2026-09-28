@@ -32,7 +32,7 @@ export interface Tuning {
   };
   deterministic: { intent: { embedThreshold: number; embedMargin: number } };
   auto: {
-    loop: { maxSteps: number; maxPerTool: number };
+    loop: { maxSteps: number; maxPerTool: number; progressive: boolean };
     memory: { selectSemantic: number; selectEpisodic: number };
   };
 }
@@ -61,5 +61,20 @@ export const EMBED_THRESHOLD = tuning.deterministic.intent.embedThreshold;
 export const EMBED_MARGIN = tuning.deterministic.intent.embedMargin;
 export const MAX_STEPS = tuning.auto.loop.maxSteps;
 export const MAX_PER_TOOL = tuning.auto.loop.maxPerTool;
+/**
+ * Progressive tool loading: expose only `find_tools` up front and let the agent enable what it
+ * needs, instead of preloading every tool schema into every turn.
+ *
+ * It lives HERE, and not as a caller-supplied flag, for two reasons found by measuring:
+ *
+ * ONE DEFAULT, NOT THREE. `entry.ts` defaulted it to true, `loop.ts` to false, and the agent eval
+ * hardcoded false — so the eval had never measured the configuration production actually runs.
+ * A knob with a different default at each layer is not a knob, it is three.
+ *
+ * SWEEPABLE. The objective's A/A guard keys on the sha of this file: two arms that differ only in
+ * a flag passed at the call site would hash identically, and a real difference between them would
+ * be reported as INVALID. Putting the flag in the config is what makes the arms distinguishable.
+ */
+export const PROGRESSIVE = tuning.auto.loop.progressive;
 export const SELECT_SEMANTIC = tuning.auto.memory.selectSemantic;
 export const SELECT_EPISODIC = tuning.auto.memory.selectEpisodic;

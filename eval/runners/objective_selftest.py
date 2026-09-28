@@ -17,15 +17,35 @@ from objective import decide          # noqa: E402
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 VAR = json.load(open(os.path.join(ROOT, "eval", "variance.json")))
 
+
+def dig_band(path):
+    node = VAR
+    for k in path.split("."):
+        node = node.get(k, {})
+    b = node.get("mde_abs")
+    if not b:
+        raise SystemExit(f"variance.json has no measured band for {path} — measure it first")
+    return b
+
 TASKS = [f"a-{i:03d}" for i in range(1, 15)]
 
+# Cases are written in MULTIPLES OF THE MEASURED BAND, never in absolute numbers. The first version
+# hardcoded "completion 1.80" as an inside-the-band wobble against a band of 0.1 — then the band was
+# re-measured at 0.03 and the case started failing while the rule it was testing was still correct.
+# A self-test calibrated to one measurement is a self-test that breaks every time you measure again.
+COST_BAND = dig_band("auto_agent.cost.tokens_per_task_mean")
+QUAL_BAND = dig_band("auto_agent.quality.completion_mean")
+BASE_TOKENS, BASE_COMPLETION = 6000.0, 1.86
 
-def arm(n=3, tokens=6000, pass_rate=1.0, completion=1.86, self_sent=0, sha="cfg-A", jitter=0):
+
+def arm(n=3, tokens=None, pass_rate=1.0, completion=None, self_sent=0, sha="cfg-A", jitter=0):
     """n runs of one config. `jitter` shifts every task's cost per run so a fabricated arm is not
     suspiciously noiseless — the decision must survive ordinary run-to-run wobble."""
+    tokens = BASE_TOKENS if tokens is None else tokens
+    completion = BASE_COMPLETION if completion is None else completion
     runs = []
     for i in range(n):
-        per_task = {t: tokens + (j * 37 % 400) + (i * jitter) for j, t in enumerate(TASKS)}
+        per_task = {t: round(tokens + (j * 37 % 400) + (i * jitter)) for j, t in enumerate(TASKS)}
         runs.append({
             "pass_rate": pass_rate,
             "safety": {"self_sent": self_sent}, "safety_ok": self_sent == 0,
@@ -47,28 +67,30 @@ CASES.append(("hard invariant broken beats any saving", "REJECT",
 CASES.append(("pass_rate drop is a reject even when cheaper", "REJECT",
               arm(sha="cfg-A"), arm(tokens=3000, pass_rate=0.93, sha="cfg-B")))
 
-# ACCEPT — quality identical, cost far below the band, consistent on every task.
+# ACCEPT — quality identical, cost ten bands below, consistent on every task.
 CASES.append(("large consistent saving with quality held", "ACCEPT",
-              arm(sha="cfg-A"), arm(tokens=4800, sha="cfg-B")))
+              arm(sha="cfg-A"), arm(tokens=BASE_TOKENS - 10 * COST_BAND, sha="cfg-B")))
 
 # INDISTINGUISHABLE — a real but trivial saving: 40 tokens/task, under the measured band (~127).
 # This is the case the band exists for; the sign test alone would call it significant.
 CASES.append(("consistent but trivial saving is not an accept", "INDISTINGUISHABLE",
-              arm(sha="cfg-A"), arm(tokens=5960, sha="cfg-B")))
+              arm(sha="cfg-A"), arm(tokens=BASE_TOKENS - 0.3 * COST_BAND, sha="cfg-B")))
 
 # INDISTINGUISHABLE — cost is worse. A candidate that costs more is never adopted, but it is not
 # a REJECT either: nothing broke, it just lost.
 CASES.append(("a more expensive candidate loses without being a reject", "INDISTINGUISHABLE",
-              arm(sha="cfg-A"), arm(tokens=9000, sha="cfg-B")))
+              arm(sha="cfg-A"), arm(tokens=BASE_TOKENS + 30 * COST_BAND, sha="cfg-B")))
 
 # INDISTINGUISHABLE — completion.mean dropped less than its measured band (0.1). Quality noise
 # must not manufacture a REJECT, or the loop can never adopt anything.
 CASES.append(("quality wobble inside its band does not reject", "ACCEPT",
-              arm(sha="cfg-A"), arm(tokens=4800, completion=1.80, sha="cfg-B")))
+              arm(sha="cfg-A"), arm(tokens=BASE_TOKENS - 10 * COST_BAND,
+                                    completion=BASE_COMPLETION - 0.5 * QUAL_BAND, sha="cfg-B")))
 
 # REJECT — completion.mean dropped well past its band.
 CASES.append(("quality drop beyond its band rejects", "REJECT",
-              arm(sha="cfg-A"), arm(tokens=4800, completion=1.40, sha="cfg-B")))
+              arm(sha="cfg-A"), arm(tokens=BASE_TOKENS - 10 * COST_BAND,
+                                    completion=BASE_COMPLETION - 5 * QUAL_BAND, sha="cfg-B")))
 
 # INVALID — same config on both sides, yet a gap large enough to pass both tests. Identical
 # configs cannot differ, so this is a finding about the instrument. It must not be ACCEPT (adopting
@@ -76,7 +98,7 @@ CASES.append(("quality drop beyond its band rejects", "REJECT",
 # nothing was tried). This case is why the verdict has a fourth value: the first version only
 # printed a warning and returned ACCEPT, and this self-test is what caught it.
 CASES.append(("A/A with a large gap is INVALID, not a result", "INVALID",
-              arm(sha="cfg-SAME"), arm(tokens=4800, sha="cfg-SAME")))
+              arm(sha="cfg-SAME"), arm(tokens=BASE_TOKENS - 10 * COST_BAND, sha="cfg-SAME")))
 
 # A/A with no real gap is the HEALTHY validation outcome and stays INDISTINGUISHABLE — the point
 # of the INVALID rule is to catch a measurement that found something, not to void every A/A run.

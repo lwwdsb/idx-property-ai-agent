@@ -22,8 +22,17 @@ def main():
     preds = _read(os.path.join(HIST, "agent.preds.jsonl"))
     meta_path = os.path.join(HIST, "agent.meta.json")
     meta = json.load(open(meta_path)) if os.path.exists(meta_path) else {}
-    n = len(preds)
-    passed = sum(1 for p in preds if p["pass"])
+    # KNOWN GAPS are reported but excluded from pass_rate, the same discipline memory_dynamics
+    # uses. A case that pins a CAPABILITY the system does not have would otherwise sit permanently
+    # red and make the gate unusable, or get quietly deleted — and deleting it is how the gap gets
+    # rediscovered six weeks later. Its assertions still run, so the day the capability lands the
+    # case starts passing and says so.
+    gaps = [p for p in preds if p.get("known_gap")]
+    real = [p for p in preds if not p.get("known_gap")]
+    n = len(real)
+    passed = sum(1 for p in real if p["pass"])
+    gaps_block = {"n": len(gaps), "behaving_as_documented": sum(1 for p in gaps if p["pass"]),
+                  "ids": [p["id"] for p in gaps]}
 
     kinds = {}
     for p in preds:
@@ -111,6 +120,7 @@ def main():
     result = {
         "pass_rate": round(passed / n, 4) if n else 0.0,
         "passed": passed, "n": n,
+        "known_gaps": gaps_block,
         "llm_live": meta.get("llmLive"),
         "safety": {"self_sent": self_sent, "approve_sent": approve_sent,
                    "approve_expected": approve_expected, "cancel_sent": cancel_sent},

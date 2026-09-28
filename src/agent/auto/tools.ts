@@ -34,8 +34,14 @@ export const SHARED_TOOL_SCHEMA: Record<string, unknown> = {
   required: ['query'],
 };
 
-/** The catalog: one function tool per registered skill. A skill may declare its own
- * `paramSchema` (e.g. email's subject/body); otherwise it gets the shared slot schema. */
+/** The catalog: one function tool per registered skill. A skill MAY declare its own `paramSchema`;
+ * otherwise it gets the shared slot schema.
+ *
+ * As of 2026-09-27 no skill declares one — this comment used to cite "e.g. email's subject/body"
+ * as if it did. It matters more than a stale comment usually would: `email` therefore receives the
+ * shared schema, has no way to be handed a body, and `email.run` renders weeklyMarketReport(city)
+ * regardless of what was asked. An agent told to email one specific listing drafts a generic city
+ * report instead, and every assertion the agent eval had at the time still passed (see a-017). */
 export function toolSpecs(registry: SkillRegistry): ToolSpec[] {
   return registry.list().map((s) => ({
     name: s.name,

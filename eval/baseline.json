@@ -149,7 +149,7 @@
       "label": "agent pass rate",
       "value": 1.0,
       "direction": "up",
-      "n": 14
+      "n": 20
     },
     "memory_facts.metrics.json:pass_rate": {
       "label": "memory facts pass rate",
@@ -159,13 +159,13 @@
     },
     "memory_select.metrics.json:arms.llm.precision": {
       "label": "memory injection precision",
-      "value": 0.9,
+      "value": 1.0,
       "direction": "up",
       "n": 10
     },
     "memory_select.metrics.json:arms.llm.recall": {
       "label": "memory injection recall",
-      "value": 0.7292,
+      "value": 0.7917,
       "direction": "up",
       "n": 10
     },
@@ -173,7 +173,7 @@
       "label": "memory dynamics pass rate",
       "value": 1,
       "direction": "up",
-      "n": 9
+      "n": 15
     },
     "memory_utility.metrics.json:pass_rate": {
       "label": "memory utility pass rate",

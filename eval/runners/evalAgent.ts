@@ -36,13 +36,40 @@ function readJsonl(path: string): any[] {
   return readFileSync(path, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
 }
 
-function evalExpect(expect: any, res: { toolsUsed: string[]; stopReason: string; steps: number; reply: string }) {
+interface EvalRes {
+  toolsUsed: string[]; stopReason: string; steps: number; reply: string;
+  /** every (tool, effectiveFilter) pair the loop actually executed, in order */
+  calls: Array<{ tool: string; filter: Record<string, unknown> }>;
+}
+
+function evalExpect(expect: any, res: EvalRes) {
   const checks: Record<string, boolean> = {};
   if (expect.tools_has) checks.tools_has = expect.tools_has.every((t: string) => res.toolsUsed.includes(t));
   if (expect.tools_not) checks.tools_not = expect.tools_not.every((t: string) => !res.toolsUsed.includes(t));
   if (expect.should_suspend !== undefined) checks.should_suspend = (res.stopReason === 'awaiting_approval') === expect.should_suspend;
   if (expect.reply_has !== undefined) checks.reply_has = res.reply.toLowerCase().includes(String(expect.reply_has).toLowerCase());
   if (expect.max_steps !== undefined) checks.max_steps = res.steps <= expect.max_steps;
+  // MIN_STEPS — the assertion the step budget was never measurable without. A task whose second
+  // call cannot be written until the first observation arrives REQUIRES more than one turn, so
+  // doing it in fewer means the argument was invented rather than derived. Note steps != tool
+  // calls: the model can emit three tool_calls in ONE turn, which is why a-006 uses three tools
+  // in two steps and why "more tools" never pushed the budget.
+  if (expect.min_steps !== undefined) checks.min_steps = res.steps >= expect.min_steps;
+  // FILTER_EQ / FILTER_RANGE — did the DERIVED value actually reach the tool? Asserting only the
+  // tool sequence lets a task pass while the second call quietly used a value the model guessed
+  // up front; these read the effectiveFilter the loop recorded, i.e. what really executed.
+  if (expect.filter_eq) {
+    checks.filter_eq = (expect.filter_eq as Array<any>).every((f) =>
+      res.calls.some((c) => c.tool === f.tool
+        && String(c.filter?.[f.field] ?? '').toLowerCase() === String(f.value).toLowerCase()));
+  }
+  if (expect.filter_range) {
+    checks.filter_range = (expect.filter_range as Array<any>).every((f) =>
+      res.calls.some((c) => {
+        const v = c.filter?.[f.field];
+        return typeof v === 'number' && v >= f.min && v <= f.max;
+      }));
+  }
   return checks;
 }
 
@@ -106,11 +133,17 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
         totalTokens: cost.totalTokens + m.totalTokens,
         elapsedMs: cost.elapsedMs + m.elapsedMs, drives: cost.drives + 1 };
     };
-    let res = { toolsUsed: [] as string[], stopReason: 'error', steps: 0, reply: '', runId: undefined as number | undefined };
+    let res = { toolsUsed: [] as string[], stopReason: 'error', steps: 0, reply: '',
+      calls: [] as Array<{ tool: string; filter: Record<string, unknown> }>,
+      runId: undefined as number | undefined };
     try {
       r1 = await runAgent(c.task, { userId: operator, registry, llm, store: runStore, progressive: false });
       res = { toolsUsed: [...new Set(r1.trace.filter((t) => t.tool).map((t) => t.tool as string))],
-        stopReason: r1.stopReason, steps: r1.steps, reply: r1.reply, runId: r1.runId };
+        stopReason: r1.stopReason, steps: r1.steps, reply: r1.reply, runId: r1.runId,
+        calls: r1.trace.filter((t) => t.tool).map((t) => ({
+          tool: t.tool as string,
+          filter: (t.effectiveFilter ?? {}) as Record<string, unknown>,
+        })) };
       addCost(r1.metrics);
     } catch (e) {
       res.reply = `ERROR: ${String(e)}`;
@@ -157,8 +190,9 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
 
     preds.push({ id: c.id, task: c.task, note: c.note, hitl: c.hitl ?? null, expect: c.expect,
       got: { toolsUsed: res.toolsUsed, stopReason: res.stopReason, steps: res.steps,
-        reply: res.reply.slice(0, 200), idCount: g.idCount, ungrounded: g.ungrounded },
-      checks, pass, judge,
+        reply: res.reply.slice(0, 200), idCount: g.idCount, ungrounded: g.ungrounded,
+        calls: res.calls },
+      checks, pass, known_gap: !!c.known_gap, judge,
       // `metrics` = first drive (booleans like budgetExhausted/suspended describe that drive);
       // `cost` = the whole task, every drive summed. The loop optimises against `cost`.
       metrics: r1?.metrics ?? null, cost: cost.drives ? cost : null });

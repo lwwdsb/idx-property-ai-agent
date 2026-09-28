@@ -35,7 +35,7 @@ def ranked_ids(query, mode, k=10):
 
 
 def eval_mode(cases, mode):
-    ndcg, rec, rr, prec = [], [], [], []
+    ndcg, rec, rr, prec, cover = [], [], [], [], []
     for c in cases:
         rel = c["label"]["relevant"]
         if not rel:
@@ -45,11 +45,28 @@ def eval_mode(cases, mode):
         rec.append(recall_at_k(ranked, rel, 10))
         rr.append(mrr(ranked, rel))
         prec.append(precision_at_k(ranked, rel, 5))
+        # JUDGED COVERAGE — what fraction of this mode's top-10 was actually judged.
+        #
+        # Scoring treats an unjudged document as irrelevant, which is the standard convention and
+        # is fine WHILE the pool covers the systems being compared. When it stops covering them the
+        # metric silently becomes a measure of pool membership instead of quality: after the index
+        # was rebuilt, half of dense's top-10 had never been judged and its nDCG "fell" 0.75 ->
+        # 0.445 on a change the objective set called indistinguishable. Nothing in the numbers said
+        # so. Coverage is the number that says so — and it needs schema v2, because v1 stored only
+        # the positives and therefore could not tell "judged 0" from "never judged".
+        graded = c["label"].get("graded")
+        if graded:
+            judged = set(str(i) for i in graded)
+            top = [str(i) for i in ranked[:10]]
+            cover.append(sum(1 for i in top if i in judged) / len(top) if top else 1.0)
+    out_cover = round(mean(cover), 4) if cover else None
     return {
         "nDCG@10": round(mean(ndcg), 4),
         "recall@10": round(mean(rec), 4),
         "MRR": round(mean(rr), 4),
         "precision@5": round(mean(prec), 4),
+        # None when the set is still schema v1 — "unknown", never silently reported as full.
+        "judged_coverage@10": out_cover,
         "n": len(ndcg),
     }
 
@@ -91,11 +108,25 @@ def main():
           f"(human-verified: {verified}/{len(cases)})\n")
 
     results = {}
-    print(f"  {'mode':8} {'nDCG@10':>9} {'recall@10':>10} {'MRR':>7} {'P@5':>7}")
+    print(f"  {'mode':8} {'nDCG@10':>9} {'recall@10':>10} {'MRR':>7} {'P@5':>7} {'judged@10':>10}")
     for mode in MODES:
         m = eval_mode(cases, mode)
         results[mode] = m
-        print(f"  {mode:8} {m['nDCG@10']:>9} {m['recall@10']:>10} {m['MRR']:>7} {m['precision@5']:>7}")
+        cov = m["judged_coverage@10"]
+        print(f"  {mode:8} {m['nDCG@10']:>9} {m['recall@10']:>10} {m['MRR']:>7} {m['precision@5']:>7}"
+              f" {(f'{cov:.3f}' if cov is not None else 'n/a (v1)'):>10}")
+
+    covs = [results[mo]["judged_coverage@10"] for mo in MODES]
+    if any(c is None for c in covs):
+        print("\n  ⚠️  这个集还是 schema v1(只存正例),分不清'判过=0'和'没判过' —— nDCG 不可跨索引变更比较。")
+        print("     重新池化+重判:.venv/bin/python eval/runners/gen_retrieval_evalset.py --from eval/datasets/<set>.jsonl")
+    else:
+        worst = min(covs)
+        if worst < 0.9:
+            print(f"\n  ⚠️  判分覆盖率最低只有 {worst:.3f} —— 有 {(1 - worst) * 100:.0f}% 的 top-10 从没被判过,"
+                  f"却按不相关计分。\n     这一版 nDCG 衡量的是'在池子里'而不是'相关',需要重新池化+重判。")
+        else:
+            print(f"\n  判分覆盖率 ≥ {worst:.3f} —— 池子覆盖了被比较的各路,nDCG 在这一版上可比。")
 
     best = max(MODES, key=lambda mo: results[mo]["nDCG@10"])
     print(f"\n  best mean nDCG@10: {best} ({results[best]['nDCG@10']})")

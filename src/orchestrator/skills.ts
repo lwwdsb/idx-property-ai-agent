@@ -15,7 +15,7 @@ import { draftEmail, previewDraft } from '../email/email.js';
 import { weeklyMarketReport } from '../email/templates.js';
 import { SkillRegistry } from './skill.js';
 import type { PythonBridge, SemanticListing } from './bridge.js';
-import { expandQuery, rrfFuse } from '../search/multiQuery.js';
+import { expandQuery, rrfFuse, translateSemantic, hasCJK } from '../search/multiQuery.js';
 import { config } from '../config.js';
 
 /** Normalized propertyType -> physical L_Type_ value (matches the Qdrant payload). */
@@ -85,7 +85,9 @@ export function extractSemanticText(message: string, filter: SearchFilter): stri
   let s = ` ${normalizeQuery(message)} `;
   if (filter.city) s = s.replace(new RegExp(filter.city, 'gi'), ' ');
   // numbers + units (beds/baths/price/sqft, incl. 中文)
-  s = s.replace(/\$?\d[\d.,]*\s*(?:万|million|mil|m|k|thousand|bed(?:room)?s?|br|bd|bath(?:room)?s?|ba|sqft|sq\.?\s?ft|square feet|平方英尺|居室|卧室|居|室|卧|房|卫|平)?/gi, ' ');
+  // 数字与单位之间允许连字符:"3-bed" 过去只被吃掉 "3",留下 "-bed" 混进语义残余
+  // (实测 mr-001 的残余是 "-bed solar panels",gold 是 "solar panels")。
+  s = s.replace(/\$?\d[\d.,]*[\s-]*(?:万|million|mil|m|k|thousand|bed(?:room)?s?|br|bd|bath(?:room)?s?|ba|sqft|sq\.?\s?ft|square feet|平方英尺|居室|卧室|居|室|卧|房|卫|平)?/gi, ' ');
   // property-type + pool words
   s = s.replace(/\b(?:single[\s-]?family|sfr|detached|town\s?houses?|town\s?homes?|condos?|condominiums?|apartments?|apts?)\b|独栋|单户|联排|公寓|pool|泳池|游泳池/gi, ' ');
   s = s.replace(ACTION_WORDS, ' ').replace(EN_FILLER, ' ').replace(ZH_FILLER, ' ');
@@ -144,7 +146,11 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
         // auto mode: use the LLM's own `semantic` field (it already split structured vs free-text);
         // deterministic mode — or if the LLM omitted it — falls back to the regex extractor.
         const argSem = ctx.args && typeof ctx.args.semantic === 'string' ? ctx.args.semantic.trim() : '';
-        const semantic = argSem || extractSemanticText(ctx.message, ctx.filter);
+        const rawSem = argSem || extractSemanticText(ctx.message, ctx.filter);
+        // 语料是英文的,所以中文残余必须先翻译,否则 dense 与 BM25 两侧都对不上 —— 实测 44 条里
+        // 16 条残余是中文,而 known-item 的分层召回是 英文 0.80 / 中文 0.21。翻不了就返回空串,
+        // 于是下面的 if 落到纯结构化搜索:宁可丢掉特征,也不要把一次语义检索变成噪声。
+        const semantic = hasCJK(rawSem) ? await translateSemantic(rawSem, ctx.llm) : rawSem;
         if (semantic) {
           try {
             const hardFilter = {

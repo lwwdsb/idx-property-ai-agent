@@ -62,7 +62,11 @@ def main():
     ap.add_argument("--k", type=int, default=10)
     ap.add_argument("--tag", default="")
     ap.add_argument("--raw", action="store_true",
-                    help="send the raw query instead of the city-stripped residue (NOT production)")
+                    help="send the raw query instead of the residue (NOT production)")
+    ap.add_argument("--semantic", choices=["translated", "untranslated", "strip"], default="translated",
+                    help="哪一条语义通道。translated=生产现状(extractSemanticText + 中文翻译);"
+                         "untranslated=同上但跳过翻译(用来隔离翻译的效果);"
+                         "strip=这个 runner 旧的近似(原始 query 减去城市)")
     args = ap.parse_args()
 
     with urllib.request.urlopen(f"{URL}/health", timeout=10) as r:
@@ -70,6 +74,21 @@ def main():
     print(f"service: {URL}  {health}")
 
     sets = {"human": load("mode_retrieval.jsonl"), "generated": load("mode_retrieval_gen.jsonl")}
+
+    # 预计算的【生产】语义文本,按 id 取。这个 runner 过去自己做 city 剥离,而生产跑的是
+    # extractSemanticText(先归一化、再剥城市/数字单位/房型/泳池词/填充词)外加中文残余翻译 ——
+    # 自己近似一遍就是又测了一条生产不走的路,和"把原始 query 直送 /search"是同一个错误。
+    SEM = {"human": os.path.join(HIST, "mode_retrieval.semantic.jsonl"),
+           "generated": os.path.join(HIST, "mode_retrieval_gen.preds.jsonl")}
+    sem = {}
+    for label, path in SEM.items():
+        if os.path.exists(path):
+            sem[label] = {r["id"]: r for r in (json.loads(l) for l in open(path, encoding="utf-8") if l.strip())}
+        else:
+            sem[label] = {}
+            if args.semantic != "strip":
+                print(f"⚠️  缺 {os.path.relpath(path, ROOT)} —— {label} 会退回 strip 近似。"
+                      f"先跑 npx tsx eval/runners/genSemanticPreds.ts")
     out = {"tag": args.tag, "k": args.k, "health": health, "subsets": {}}
     for label, cases in sets.items():
         cases = [c for c in cases if (c.get("gold") or {}).get("known_item")]
@@ -81,7 +100,17 @@ def main():
         per_lang = defaultdict(lambda: [0, 0])
         for i, c in enumerate(cases, 1):
             f = c["gold"].get("filter") or {}
-            text = c["input"] if args.raw else strip_city(c["input"], f.get("city"))
+            pre = sem.get(label, {}).get(c["id"])
+            if args.raw:
+                text = c["input"]
+            elif args.semantic == "strip" or not pre:
+                text = strip_city(c["input"], f.get("city"))
+            else:
+                key = "semantic" if args.semantic == "translated" else "raw"
+                # 空残余在生产里根本不进 Qdrant(走 MySQL 结构化)。这里仍然要发一次请求才能
+                # 算召回,所以退回城市剥离,并在输出里单独计数 —— 否则这些用例会被静默当成
+                # "语义检索的成绩",而生产从没让语义检索碰过它们。
+                text = pre.get(key) or strip_city(c["input"], f.get("city"))
             body = {"text": text, "k": args.k,
                     "city": f.get("city"), "max_price": f.get("maxPrice"),
                     "min_price": f.get("minPrice"), "min_beds": f.get("beds"),

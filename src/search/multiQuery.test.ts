@@ -3,7 +3,7 @@
  * Run: npx tsx src/search/multiQuery.test.ts
  */
 import assert from 'node:assert/strict';
-import { expandQuery, rrfFuse } from './multiQuery.js';
+import { expandQuery, rrfFuse, translateSemantic, hasCJK } from './multiQuery.js';
 import type { LLMClient, ChatMessage } from '../llm/client.js';
 
 let pass = 0, fail = 0;
@@ -43,6 +43,34 @@ await check('rrfFuse: items ranked high across lists win; union deduped', () => 
 });
 await check('rrfFuse: same id across lists is deduped', () => {
   assert.equal(rrfFuse([[{ id: 1 }], [{ id: 1 }], [{ id: 2 }]], (x) => x.id).length, 2);
+});
+
+
+await check('hasCJK: 只认中日韩,不误伤英文与数字', () => {
+  assert.equal(hasCJK('mid-century with ADU'), false);
+  assert.equal(hasCJK('3-bed 1.6M'), false);
+  assert.equal(hasCJK('中古风'), true);
+  assert.equal(hasCJK('mixed 中古风 style'), true);
+});
+
+await check('translateSemantic: 英文原样返回,不白花一次调用', async () => {
+  let called = false;
+  const llm = { available: true, async parseFilters() { return {}; },
+    async chatWithTools() { called = true; return { content: 'x', toolCalls: [], raw: { role: 'assistant' as const, content: 'x' } }; } };
+  assert.equal(await translateSemantic('ocean view craftsman', llm as never), 'ocean view craftsman');
+  assert.equal(called, false, '英文残余不该触发任何调用');
+});
+
+await check('translateSemantic: 没有 LLM 时返回空串 —— 降级结构化而不是送噪声', async () => {
+  // 空串是给调用方的信号:走纯结构化搜索。宁可丢掉特征,也不要拿中文去搜英文语料 ——
+  // 后者不是"效果差一点",而是把一次语义检索变成噪声,还把路由带错(非空残余=走 hybrid)。
+  assert.equal(await translateSemantic('中古风 学区好', undefined), '');
+});
+
+await check('translateSemantic: 翻译结果仍含中文 -> 按失败处理', async () => {
+  const llm = { available: true, async parseFilters() { return {}; },
+    async chatWithTools() { return { content: '中古风 style', toolCalls: [], raw: { role: 'assistant' as const, content: '' } }; } };
+  assert.equal(await translateSemantic('中古风', llm as never), '', '半成品不许送进索引');
 });
 
 console.log(`\n${pass}/${pass + fail} passed`);

@@ -65,6 +65,12 @@ const PLAN_PROMPT = [
   'asks for multiple things (e.g. find homes AND show the market).',
   'For EACH chosen skill, also give "query": the self-contained part of the message',
   'relevant to that skill only (keep its constraints; drop the other skills\' parts).',
+  'WRITE FEATURE AND STYLE TERMS IN ENGLISH, even when the user wrote in another language —',
+  'the listing corpus is English, so a Chinese style phrase reaching the semantic index matches',
+  'nothing on either the dense or the BM25 side. Keep city names and numbers as they are; only',
+  'translate the descriptive words (中古风 -> mid-century, 学区好 -> good school district).',
+  'Doing it here costs nothing extra: this call is already generating text, whereas leaving it',
+  'for downstream means one translation call PER STEP of the plan.',
   'Use only skill names from the list. Return JSON only:',
   '{"plan": [{"skill": "name", "query": "sub-query for this skill"}, ...]}',
 ].join('\n');

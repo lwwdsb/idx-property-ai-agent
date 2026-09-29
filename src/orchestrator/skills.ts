@@ -151,6 +151,11 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
         // 16 条残余是中文,而 known-item 的分层召回是 英文 0.80 / 中文 0.21。翻不了就返回空串,
         // 于是下面的 if 落到纯结构化搜索:宁可丢掉特征,也不要把一次语义检索变成噪声。
         const semantic = hasCJK(rawSem) ? await translateSemantic(rawSem, ctx.llm) : rawSem;
+        // 翻译失败(没有 LLM,或它没翻出英文)-> semantic 为空 -> 下面落到纯结构化搜索。
+        // 那是安全的选择,但【不能是静默的】:用户描述了风格而我们没用上,必须说出来。这正是本文件
+        // 另一处已有的约定——"Say out loud which fields we guessed, so a default is never a silent
+        // assumption"——而语义被丢掉时之前没遵守。
+        const droppedStyle = Boolean(rawSem) && !semantic;
         if (semantic) {
           try {
             const hardFilter = {
@@ -198,10 +203,15 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
               return `${i + 1}. ${formatListingCard(r)}${c}`;
             }).join('\n\n');
             const head = `🔎 ${summarizeFilter(ctx.filter)}\nTop ${ranked.length} by commute:`;
-            return { skill: 'search', reply: `${head}\n\n${cards}`, data: { ...turn, rows: ranked, proximity: true } };
+            const pNote = droppedStyle ? `\n\n⚠️ 暂时没能用上你描述的风格/特征 —— 只按结构化条件筛的。` : '';
+            return { skill: 'search', reply: `${head}\n\n${cards}${pNote}`,
+                     data: { ...turn, rows: ranked, proximity: true, droppedStyle } };
           }
         }
-        return { skill: 'search', reply: turn.reply, data: turn };
+        const note = droppedStyle
+          ? `\n\n⚠️ 暂时没能用上你描述的风格/特征(「${rawSem.slice(0, 40)}」)—— 只按结构化条件筛的。`
+          : '';
+        return { skill: 'search', reply: turn.reply + note, data: { ...turn, droppedStyle } };
       },
     })
     .register({

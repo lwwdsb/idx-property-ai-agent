@@ -33,12 +33,6 @@
       "frozen": true,
       "note": "L3 动态层。2026-09-27 从 10 加到 17 条(补情景动态 + 异名冲突),因此 v2"
     },
-    "memory_facts.jsonl": {
-      "version": 1,
-      "sha256_16": "ca9975b126895b94",
-      "lines": 5,
-      "frozen": true
-    },
     "memory_select.jsonl": {
       "version": 2,
       "sha256_16": "daba1ee29689309b",
@@ -47,8 +41,8 @@
       "note": "L2 选择层。2026-09-28 从 10 加到 13 条(补注入上限生效区间),因此 v2"
     },
     "memory_utility.jsonl": {
-      "version": 1,
-      "sha256_16": "572f5cb141edb8c5",
+      "version": 2,
+      "sha256_16": "8f167b1ec5d9b885",
       "lines": 7,
       "frozen": true
     },

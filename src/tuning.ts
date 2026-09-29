@@ -28,7 +28,6 @@ export interface Tuning {
     retrieval: { rerankCoarse: number; prefetch: number; rerankEnabled: boolean; topK: number };
     search: { maxResults: number; tooMany: number };
     rag: { chunkSize: number; chunkOverlap: number; topK: number };
-    facts: { confidenceThreshold: number };
   };
   deterministic: { intent: { embedThreshold: number; embedMargin: number } };
   auto: {
@@ -56,7 +55,6 @@ export const PREFETCH = tuning.shared.retrieval.prefetch;
 export const SEARCH_TOP_K = tuning.shared.retrieval.topK;
 export const MAX_RESULTS = tuning.shared.search.maxResults;
 export const TOO_MANY = tuning.shared.search.tooMany;
-export const FACT_CONFIDENCE_THRESHOLD = tuning.shared.facts.confidenceThreshold;
 export const EMBED_THRESHOLD = tuning.deterministic.intent.embedThreshold;
 export const EMBED_MARGIN = tuning.deterministic.intent.embedMargin;
 export const MAX_STEPS = tuning.auto.loop.maxSteps;

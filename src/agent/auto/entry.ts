@@ -17,7 +17,7 @@ import type { DraftStore } from '../../email/drafts.js';
 import type { SkillRegistry } from '../../orchestrator/skill.js';
 import type { LLMClient } from '../../llm/client.js';
 import { runAgent, resumeAgentRun, retryAgentRun } from './loop.js';
-import { loadProfile, saveFacts, saveUsage, profileHint, seedFilterFor, selectMemories, touchMemory, learnFromFilter } from '../../memory/profile.js';
+import { loadProfile, saveUsage, profileHint, seedFilterFor, selectMemories, touchMemory } from '../../memory/profile.js';
 import { parseQuery } from '../../search/parseQuery.js';
 import { isKnownCity } from '../../search/cityDictionary.js';
 import type { AgentRunStore, AgentRun } from './runStore.js';
@@ -98,19 +98,13 @@ export async function handleAgentMessage(
   const auto = message.match(AUTO);
   if (auto) {
     const task = auto[1]!.trim();
-    const profile = loadProfile(userId);   // long-term memory: facts + semantic + selected episodic
-    // immediate FACT learning (symmetric with the deterministic mode's onFilter): parse the
-    // user's OWN words (not the injected defaults) so we don't self-reinforce our own seeds.
-    const userFilter = (await parseQuery(task, { isKnownCity })).filter;
-    const learned = Object.values(userFilter).some((v) => v != null);
-    if (learned) learnFromFilter(profile, userFilter);
+    const profile = loadProfile(userId);   // 跨会话记忆:语义 + 情景(事实层已删,见 profile.ts)
     // BOTH memory types are selectively loaded: the LLM picks what's relevant to this task by
     // description, capped per type. Selecting (rather than injecting all semantic) is what makes
     // useCount a real signal — see selectMemories.
     const selected = await selectMemories(profile.memories, task, llm);
     selected.forEach((m) => touchMemory(profile, m.name));
     // Two files, both owned by this path — never the consolidation agent's memories file.
-    if (learned) saveFacts(profile);
     if (selected.length) saveUsage(profile);
     const res = await runAgent(task, {
       userId, registry, llm, store: runStore, progressive: deps.progressive ?? PROGRESSIVE,

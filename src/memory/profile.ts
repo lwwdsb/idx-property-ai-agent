@@ -1,6 +1,19 @@
 /**
  * Long-term user memory (cross-session) — shared by both modes. Classified memory:
- *   - facts:    structured slots (prefs). No name/desc; type is decided by schema, not
+ *   - facts:    【2026-09-28 已删除】曾经是带 confidence 与侵蚀的结构化偏好层。删除理由不是
+ *               "没用",而是【它和语义记忆的声明式 slots 在做同一件事】,两套机制抢同一个位置:
+ *               两者都产出一个 Partial<SearchFilter> 软默认,而声明式那套各方面更好 ——
+ *               由整理子智能体显式声明、带理由、在 profile.md 里可审查,而不是一个隐式计数器。
+ *
+ *               更关键的是【来源歧义】:filter 对象不记录来源,所以里面的 maxPrice 可能是用户刚说
+ *               的、本会话前几轮携带的、或者三周前学到的偏好 —— 下游代码和回复措辞完全一样地
+ *               对待这三种。跨会话预填在第一轮就制造了一个下游无法区分的歧义,而"用户说了但正则
+ *               没抽到"的情况下,那个记忆值看起来是软默认、实际在覆盖用户刚说的话。
+ *
+ *               现在的分工:确定性路径【没有跨会话记忆】,所有值只来自当轮或本会话前几轮(会话
+ *               槽位携带),因此完全可预测;auto 路径保留跨会话能力,走声明式 slots + 散文注入,
+ *               而值的来源在 trace 的 effectiveFilter 里可查。
+ *   - (原 facts:) structured slots (prefs). No name/desc; type is decided by schema, not
  *               content -> 0 LLM. Always full-injected as soft defaults.
  *   - semantic: generalized preferences ("likes bright old homes"). name/desc + metadata.
  *   - episodic: specific events. name/desc + metadata; SELECTIVELY loaded by description.
@@ -12,7 +25,6 @@
  *
  * STORAGE — split by WRITER, so the chat agent and the consolidation sub-agent never write the
  * same file and cannot clobber each other (no locking needed; the conflict is gone by design):
- *   <uid>.facts.json     prefs                       <- written by the chat path only
  *   <uid>.memories.json  memories + watermark        <- written by the consolidation agent only
  *   <uid>.usage.json     per-memory useCount/lastUsed <- written by the chat path only
  *   <uid>.md             rendered mirror, derived, best-effort (never read back)
@@ -27,7 +39,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from '
 import { join } from 'node:path';
 import type { SearchFilter } from '../search/filters.js';
 import type { LLMClient, ChatMessage } from '../llm/client.js';
-import { FACT_CONFIDENCE_THRESHOLD, SELECT_SEMANTIC, SELECT_EPISODIC,
+import { SELECT_SEMANTIC, SELECT_EPISODIC,
   FALLBACK_SEMANTIC, FALLBACK_EPISODIC } from '../tuning.js';
 
 const PREF_KEYS = ['city', 'beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft'] as const;
@@ -57,7 +69,6 @@ export interface MemoryEntry {
 export interface UserProfile {
   userId: string;
   updated: string;
-  prefs: Partial<Record<PrefKey, PrefEntry>>;   // facts
   memories: MemoryEntry[];                       // semantic + episodic
   /**
    * Consumer cursor into this user's agent_runs: the highest run id already digested by
@@ -74,7 +85,6 @@ const DIR = 'data/profiles';
 const today = () => new Date().toISOString().slice(0, 10);
 const sanitize = (userId: string) => userId.replace(/[^a-zA-Z0-9_-]/g, '_');
 const legacyPath = (userId: string) => join(DIR, `${sanitize(userId)}.json`);
-const factsPath = (userId: string) => join(DIR, `${sanitize(userId)}.facts.json`);
 const memoriesPath = (userId: string) => join(DIR, `${sanitize(userId)}.memories.json`);
 const usagePath = (userId: string) => join(DIR, `${sanitize(userId)}.usage.json`);
 const mdPath = (userId: string) => join(DIR, `${sanitize(userId)}.md`);
@@ -94,7 +104,7 @@ function readJson<T>(path: string): T | null {
 }
 
 export function freshProfile(userId: string): UserProfile {
-  return { userId, updated: today(), prefs: {}, memories: [], lastConsolidatedRunId: 0 };
+  return { userId, updated: today(), memories: [], lastConsolidatedRunId: 0 };
 }
 
 /**
@@ -103,11 +113,9 @@ export function freshProfile(userId: string): UserProfile {
  */
 export function loadProfile(userId: string): UserProfile {
   const legacy = readJson<UserProfile>(legacyPath(userId));   // pre-split file, if any
-  const facts = readJson<{ prefs?: UserProfile['prefs']; updated?: string }>(factsPath(userId));
   const mem = readJson<{ memories?: MemoryEntry[]; lastConsolidatedRunId?: number; updated?: string }>(memoriesPath(userId));
   const usage = readJson<Record<string, UsageEntry>>(usagePath(userId)) ?? {};
 
-  const prefs = facts?.prefs ?? legacy?.prefs ?? {};
   const memories = (mem?.memories ?? legacy?.memories ?? []).map((raw) => {
     // `confidence` was defined but never consumed by compScore, and the add_memory tool never
     // even exposed it — dropped. Strip it off existing files instead of carrying it forever.
@@ -120,9 +128,11 @@ export function loadProfile(userId: string): UserProfile {
       lastUsed: u?.lastUsed ?? m.lastUsed ?? m.createdAt,
     };
   });
-  const updated = [facts?.updated, mem?.updated, legacy?.updated].filter(Boolean).sort().pop() ?? today();
+  // 旧的 <uid>.facts.json 若还在磁盘上会被忽略而不是报错 —— 删掉一个子系统不应该让老用户的
+  // 档案加载失败。它的内容不再影响任何检索。
+  const updated = [mem?.updated, legacy?.updated].filter(Boolean).sort().pop() ?? today();
   return {
-    userId, updated, prefs, memories,
+    userId, updated, memories,
     lastConsolidatedRunId: mem?.lastConsolidatedRunId ?? legacy?.lastConsolidatedRunId ?? 0,
   };
 }
@@ -135,10 +145,6 @@ export function loadProfile(userId: string): UserProfile {
  *   touchMemory            -> saveUsage
  *   addMemory/forgetMemory/compactMemories/watermark -> saveMemories
  */
-export function saveFacts(profile: UserProfile): void {
-  writeAtomic(factsPath(profile.userId), JSON.stringify({ prefs: profile.prefs, updated: profile.updated }, null, 2));
-  refreshMd(profile);
-}
 export function saveMemories(profile: UserProfile): void {
   // Usage counters are the other writer's file — strip them so we never write them back here.
   const memories = profile.memories.map(({ useCount: _u, lastUsed: _l, ...rest }) => rest);
@@ -161,29 +167,8 @@ function refreshMd(profile: UserProfile): void {
 // ── Facts (structured, 0 LLM) ──────────────────────────────────────────────────
 /** Immediate level: fold ONE turn's filter into fact slots. Same value reinforces;
  * different value erodes confidence, replacing a stale pref that keeps getting contradicted. */
-export function learnFromFilter(profile: UserProfile, filter: SearchFilter): UserProfile {
-  const day = today();
-  for (const key of PREF_KEYS) {
-    const v = filter[key] as PrefValue | undefined;
-    if (v == null) continue;
-    const e = profile.prefs[key];
-    if (!e) profile.prefs[key] = { value: v, confidence: 0.3, seen: 1, last: day };
-    else if (e.value === v) { e.seen += 1; e.confidence = Math.min(0.95, e.confidence + 0.15); e.last = day; }
-    else { e.confidence -= 0.2; if (e.confidence <= 0.2) profile.prefs[key] = { value: v, confidence: 0.3, seen: 1, last: day }; }
-  }
-  profile.updated = day;
-  return profile;
-}
 
 /** High-confidence facts as a partial filter — soft defaults to fill missing fields. */
-export function preferredFilter(profile: UserProfile, threshold = FACT_CONFIDENCE_THRESHOLD): Partial<SearchFilter> {
-  const out: Partial<SearchFilter> = {};
-  for (const key of PREF_KEYS) {
-    const e = profile.prefs[key];
-    if (e && e.confidence >= threshold) (out as Record<string, PrefValue>)[key] = e.value;
-  }
-  return out;
-}
 
 // ── Semantic/episodic entries (name/desc + metadata) ───────────────────────────
 export interface NewMemory {
@@ -544,7 +529,7 @@ export function memoryDerivedFilter(memories: MemoryEntry[]): Partial<SearchFilt
 export function seedFilterFor(profile: UserProfile, _selected: MemoryEntry[] = []): Partial<SearchFilter> {
   // memoryDerivedFilter takes ALL memories, not the selected ones — see its own note. `_selected`
   // is kept in the signature so call sites read symmetrically with profileHint(profile, selected).
-  return { ...memoryDerivedFilter(profile.memories), ...preferredFilter(profile) };
+  return memoryDerivedFilter(profile.memories);
 }
 
 // ── Injection helpers ──────────────────────────────────────────────────────────
@@ -555,8 +540,6 @@ export function seedFilterFor(profile: UserProfile, _selected: MemoryEntry[] = [
  */
 export function profileHint(profile: UserProfile, selected: MemoryEntry[] = []): string {
   const parts: string[] = [];
-  const pf = preferredFilter(profile);
-  if (Object.keys(pf).length) parts.push(`likely preferences ${JSON.stringify(pf)}`);
   if (selected.length) parts.push(`what we know: ${selected.map((m) => m.content).join('; ')}`);
   if (!parts.length) return '';
   return `USER PROFILE (soft context — the current request always overrides): ${parts.join('; ')}.`;
@@ -564,15 +547,15 @@ export function profileHint(profile: UserProfile, selected: MemoryEntry[] = []):
 
 /** Human-readable mirror. */
 export function renderMd(p: UserProfile): string {
-  const prefRows = PREF_KEYS.filter((k) => p.prefs[k]).map((k) => {
-    const e = p.prefs[k]!; return `| ${k} | ${e.value} | ${e.confidence.toFixed(2)} | ${e.seen} | ${e.last} |`;
-  });
   const memRows = (t: MemoryType) => p.memories.filter((m) => m.type === t)
     .map((m) => `| ${m.name} | ${m.description} | ${m.salience.toFixed(2)} | ${m.useCount} | ${m.lastUsed} |`);
   return [
     `# User profile — ${p.userId}`, '', `_updated ${p.updated}_`, '',
-    '## Facts (structured — soft defaults)', '', '| field | value | conf | seen | last |', '|---|---|---|---|---|',
-    ...(prefRows.length ? prefRows : ['| _(none)_ | | | | |']), '',
+    '## 声明式约束(语义记忆上的 slots —— 唯一的跨会话软默认来源)', '',
+    '| 记忆 | 声明的槽位 |', '|---|---|',
+    ...(p.memories.filter((m) => m.slots && Object.keys(m.slots).length)
+      .map((m) => `| ${m.name} | ${JSON.stringify(m.slots)} |`) || []),
+    ...(p.memories.some((m) => m.slots && Object.keys(m.slots).length) ? [] : ['| _(none)_ | |']), '',
     '## Semantic (generalized preferences)', '', '| name | description | salience | used | last |', '|---|---|---|---|---|',
     ...(memRows('semantic').length ? memRows('semantic') : ['| _(none)_ | | | | |']), '',
     '## Episodic (events — selectively loaded)', '', '| name | description | salience | used | last |', '|---|---|---|---|---|',

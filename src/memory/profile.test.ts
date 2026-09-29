@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { rmSync } from 'node:fs';
 import {
-  freshProfile, learnFromFilter, preferredFilter, saveFacts, saveMemories, saveUsage, loadProfile, renderMd,
+  freshProfile, saveMemories, saveUsage, loadProfile, renderMd,
   addMemory, touchMemory, selectMemories, semanticMemories, episodicMemories, profileHint,
   compactMemories, forgetMemory, memoryDerivedFilter, slotConflicts,
 } from './profile.js';
@@ -20,20 +20,6 @@ async function check(name: string, fn: () => void | Promise<void>) {
 const f = (o: Partial<SearchFilter>) => o as SearchFilter;
 
 // ── facts (structured, 0 LLM) ──
-await check('fact: new field low-confidence; repetition reinforces past threshold', () => {
-  let p = freshProfile('u');
-  p = learnFromFilter(p, f({ city: 'Irvine' }));
-  assert.ok(p.prefs.city!.confidence < 0.5);
-  for (let i = 0; i < 2; i++) p = learnFromFilter(p, f({ city: 'Irvine' }));
-  assert.ok(p.prefs.city!.confidence >= 0.5 && p.prefs.city!.seen === 3);
-});
-await check('fact: conflicting value erodes then replaces; preferredFilter = high-conf only', () => {
-  let p = freshProfile('u');
-  for (let i = 0; i < 3; i++) p = learnFromFilter(p, f({ city: 'Irvine', beds: 3 }));
-  p = learnFromFilter(p, f({ maxPrice: 2000000 }));   // low conf
-  const def = preferredFilter(p);
-  assert.equal(def.city, 'Irvine'); assert.equal(def.beds, 3); assert.equal(def.maxPrice, undefined);
-});
 
 // ── semantic / episodic entries ──
 await check('memory: addMemory creates then merges (salience max, sourceRuns union)', () => {
@@ -96,32 +82,31 @@ await check('memory: caps apply PER TYPE — episodics cannot crowd out preferen
   assert.equal(sel.filter((m) => m.type === 'episodic').length, 3);
   assert.ok(sel.some((m) => m.name === 'sem'), 'a low-salience preference still gets its own slot');
 });
-await check('profileHint: facts always; memories ONLY if they were selected', () => {
-  let p = freshProfile('u');
-  for (let i = 0; i < 3; i++) p = learnFromFilter(p, f({ city: 'Irvine' }));
+await check('profileHint: 记忆必须【被选中】才注入;没选中就什么都不注入', () => {
+  const p = freshProfile('u');
   addMemory(p, { name: 'schools', description: 'schools', type: 'semantic', content: 'likes good schools' });
   addMemory(p, { name: 'ev', description: 'event', type: 'episodic', content: 'drafted a report' });
-  // Nothing selected -> no memories injected, semantic included. Injecting what was never
-  // selected is exactly what made useCount meaningless.
-  const bare = profileHint(p);
-  assert.ok(bare.includes('Irvine'), 'facts are still always injected');
-  assert.ok(!bare.includes('likes good schools') && !bare.includes('drafted a report'));
+  // 注入没被选中的东西,正是当初让 useCount 失去意义的原因。事实层删除之后,profileHint 里已经
+  // 没有"总是注入"的部分 —— 空档案给出空串,而不是一段没有内容的模板。
+  assert.equal(profileHint(p), '', '什么都没选中 -> 不注入任何东西');
   const withSel = profileHint(p, semanticMemories(p));
   assert.ok(withSel.includes('likes good schools'));
+  assert.ok(!withSel.includes('drafted a report'), '只注入选中的那些');
 });
 
 // ── store round-trip ──
-await check('save/load round-trip + md renders facts and memories', () => {
+await check('save/load round-trip + md 渲染记忆与声明式 slots', () => {
   const uid = 'test-profile-user';
-  let p = freshProfile(uid);
-  for (let i = 0; i < 3; i++) p = learnFromFilter(p, f({ city: 'Irvine' }));
+  const p = freshProfile(uid);
+  addMemory(p, { name: 'budget', description: '预算上限 200 万', type: 'semantic',
+    content: '超过 200 万不考虑', slots: { maxPrice: 2_000_000 } as never });
   addMemory(p, { name: 'schools', description: 'cares about schools', type: 'semantic', content: 'likes good school zones' });
-  saveFacts(p); saveMemories(p); saveUsage(p);   // one call per writer-owned file
+  saveMemories(p); saveUsage(p);   // one call per writer-owned file
   const loaded = loadProfile(uid);
-  assert.equal(loaded.prefs.city!.value, 'Irvine');
-  assert.equal(semanticMemories(loaded).length, 1);
+  assert.equal(semanticMemories(loaded).length, 2);
   const md = renderMd(loaded);
-  assert.ok(md.includes('Irvine') && md.includes('cares about schools'));
+  assert.ok(md.includes('cares about schools'), 'md 列出语义记忆');
+  assert.ok(md.includes('maxPrice'), 'md 列出声明式 slots —— 这是现在唯一的跨会话软默认来源,必须可审查');
   for (const suffix of ['facts.json', 'memories.json', 'usage.json', 'md']) {
     rmSync(`data/profiles/${uid}.${suffix}`, { force: true });
   }
@@ -134,21 +119,20 @@ await check('split store: the two writers do not clobber each other', () => {
   // chat path writes a fact; consolidation path writes a memory — from SEPARATE loads, the way
   // two concurrent writers would. Under one shared file the second save would erase the first.
   const chat = freshProfile(uid);
-  learnFromFilter(chat, f({ city: 'Irvine' }));
-  saveFacts(chat);
+  addMemory(chat, { name: 'pref-a', description: 'd', type: 'semantic', content: 'c' });
+  saveMemories(chat);
 
   const agent = loadProfile(uid);
   addMemory(agent, { name: 'm1', description: 'd', type: 'semantic', content: 'c' });
   agent.lastConsolidatedRunId = 7;
   saveMemories(agent);
 
-  const stale = freshProfile(uid);            // a writer that never saw the memory at all
-  learnFromFilter(stale, f({ beds: 3 }));
-  saveFacts(stale);
+  const stale = freshProfile(uid);            // 一个从没见过对方写入的 writer
+  touchMemory(stale, 'pref-a');
+  saveUsage(stale);
 
   const merged = loadProfile(uid);
-  assert.equal(merged.prefs.beds!.value, 3, 'latest fact write wins');
-  assert.equal(merged.memories.length, 1, 'memory survives a facts-only write');
+  assert.equal(merged.memories.length, 2, '两个 writer 的记忆都在,互不覆盖');
   assert.equal(merged.lastConsolidatedRunId, 7, 'watermark survives too');
   clean();
 });

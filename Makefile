@@ -60,7 +60,6 @@ eval:           ## run the full evaluation suite -> eval/report.md (needs Qdrant
 	$(PY) eval/runners/report_mode_intent.py
 	npx tsx eval/runners/evalAgent.ts
 	$(PY) eval/runners/report_agent.py
-	npx tsx eval/runners/evalMemoryFacts.ts
 	npx tsx eval/runners/evalMemoryDynamics.ts
 	npx tsx eval/runners/evalMemorySelect.ts
 	$(PY) eval/runners/report_memory_select.py

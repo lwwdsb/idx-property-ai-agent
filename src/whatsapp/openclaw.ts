@@ -16,7 +16,6 @@ import { getLLMClient } from '../llm/client.js';
 import { MySqlDraftStore } from '../email/drafts.js';
 import { MySqlAgentRunStore } from '../agent/auto/runStore.js';
 import { handleAgentMessage } from '../agent/auto/entry.js';
-import { loadProfile, saveFacts, learnFromFilter, preferredFilter } from '../memory/profile.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -45,15 +44,11 @@ export async function replyTo(msg: InboundMessage, channel: Channel = openclawCh
       // SUSPENDED run's draft resumes it. Non-agent messages return null -> orchestrate.
       const agentReply = await handleAgentMessage(userId, text, { registry, llm, draftStore, runStore });
       if (agentReply !== null) return agentReply;
-      // Long-term memory: soft-default missing fields from prefs, and learn from what the user gave.
-      const profile = loadProfile(userId);
-      const result = await orchestrate(userId, text, {
-        registry, draftStore, llm,
-        filterDefaults: preferredFilter(profile),
-        onFilter: (uf) => {
-          if (Object.values(uf).some((v) => v != null)) { learnFromFilter(profile, uf); saveFacts(profile); }
-        },
-      });
+      // 确定性路径【没有跨会话记忆】(2026-09-28 起)。所有槽位值只来自当轮解析或本会话前几轮的
+      // 携带,因此 filter 里的每一个值都是用户在这段可见的对话里说过的 —— 不会出现"这个值是三周前
+      // 学来的还是你刚说的"这种下游无法区分的歧义。跨会话偏好只保留在 auto 路径(语义记忆的声明式
+      // slots + 散文注入),那里值的来源在 trace 的 effectiveFilter 里可查。详见 memory/profile.ts。
+      const result = await orchestrate(userId, text, { registry, draftStore, llm });
       return result.reply;
     },
   });

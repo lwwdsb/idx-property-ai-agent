@@ -12,7 +12,7 @@
  * around it is fake.
  *
  * Two layers, because they are injected through different doors:
- *   facts  deterministic, 0 LLM. preferredFilter feeds mergeFilter as a LAST resort, so utility
+ *   slots  deterministic, 0 LLM. 声明式 slots 经 seedFilterFor 进 mergeFilter 作为【最后兜底】,所以效用
  *          is visible directly in the merged filter.
  *   agent  the real ReAct loop, twice. The assertion is on TOOL ARGUMENTS rather than on reply
  *          text: whether the remembered constraint reached the call is objective, whereas
@@ -27,7 +27,7 @@
  *   npx tsx eval/runners/evalMemoryUtility.ts
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
-import { freshProfile, learnFromFilter, preferredFilter, addMemory, profileHint, seedFilterFor, selectMemories } from '../../src/memory/profile.js';
+import { freshProfile, addMemory, profileHint, seedFilterFor, selectMemories } from '../../src/memory/profile.js';
 import { mergeFilter, type SearchFilter } from '../../src/search/filters.js';
 import { runAgent } from '../../src/agent/auto/loop.js';
 import { InMemoryAgentRunStore } from '../../src/agent/auto/runStore.js';
@@ -67,12 +67,16 @@ const rows = [];
 for (const c of cases) {
   let withObs: any, withoutObs: any;
 
-  if (c.layer === 'facts') {
+  if (c.layer === 'slots') {
+    // 声明式 slots 层:事实层删除后【唯一的跨会话软默认来源】。0 LLM,纯确定性。
+    // 生产顺序:记忆值是最后兜底,当轮自己的 filter 压在上面 —— mu-004 钉的就是这个顺序。
     let p = freshProfile('eval');
-    for (const t of c.history) p = learnFromFilter(p, t.stated as SearchFilter);
-    // Production order: remembered values are the last resort, the turn's own filter goes on top.
-    const stated = (c.task.match(/San Diego/) ? { city: 'San Diego' } : {}) as SearchFilter;
-    withObs = mergeFilter(preferredFilter(p) as SearchFilter, stated);
+    for (const m of c.memories) {
+      p = addMemory(p, { name: m.name, description: m.description, type: m.type, content: m.content,
+        salience: m.salience, slots: m.slots });
+    }
+    const stated = (c.task.match(/预算三百万/) ? { maxPrice: 3_000_000 } : {}) as SearchFilter;
+    withObs = mergeFilter(seedFilterFor(p) as SearchFilter, stated);
     withoutObs = mergeFilter({} as SearchFilter, stated);
   } else {
     let p = freshProfile('eval');
@@ -101,7 +105,10 @@ for (const c of cases) {
     if (exp.tool_args_lack) checks[`${arm}_no_args`] = lacks(obs, exp.tool_args_lack);
   }
   const differs = JSON.stringify(withObs) !== JSON.stringify(withoutObs);
-  const isControl = !!c.meta?.note?.startsWith('negative control');
+  // 显式字段优先。原来只看 meta.note 是否以 'negative control' 开头 —— 用字符串前缀当标志位,
+  // 重写用例时把标记写丢了就会静默变成"正例",而正例要求 differs=true,于是一条本来正确的负对照
+  // 反而失败。老用例保留前缀兼容。
+  const isControl = c.control === true || !!c.meta?.note?.startsWith('negative control');
   // For a positive case, "no difference" means the memory did nothing — the null result this
   // eval exists to expose. For a negative control, no difference is the CORRECT answer.
   checks.differential = isControl ? !differs : differs;

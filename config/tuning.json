@@ -15,9 +15,6 @@
       "chunkSize": 600,
       "chunkOverlap": 100,
       "topK": 3
-    },
-    "facts": {
-      "confidenceThreshold": 0.5
     }
   },
   "deterministic": {

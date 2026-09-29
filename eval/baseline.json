@@ -151,12 +151,6 @@
       "direction": "up",
       "n": 20
     },
-    "memory_facts.metrics.json:pass_rate": {
-      "label": "memory facts pass rate",
-      "value": 1,
-      "direction": "up",
-      "n": 5
-    },
     "memory_select.metrics.json:arms.llm.precision": {
       "label": "memory injection precision",
       "value": 1.0,

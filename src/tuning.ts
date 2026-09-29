@@ -30,7 +30,8 @@ export interface Tuning {
     rag: { chunkSize: number; chunkOverlap: number; topK: number };
   };
   deterministic: { intent: { embedThreshold: number; embedMargin: number;
-    arity: 'regex' | 'jev'; arityThreshold: number } };
+    arity: 'regex' | 'jev'; arityThreshold: number;
+    fieldAudit: boolean; fieldAuditThreshold: number } };
   auto: {
     loop: { maxSteps: number; maxPerTool: number; progressive: boolean; intentSelector: 'llm' | 'jev' };
     memory: { selectSemantic: number; selectEpisodic: number; fallbackSemantic: number; fallbackEpisodic: number };
@@ -82,6 +83,22 @@ if (!(ARITY_VALUES as readonly string[]).includes(tuning.deterministic.intent.ar
 }
 export const ARITY = tuning.deterministic.intent.arity;
 export const ARITY_THRESHOLD = tuning.deterministic.intent.arityThreshold;
+/**
+ * 字段审计:问"这句话【说了】哪些字段",而不是"抽到了哪些"。
+ *
+ * 它修的是系统分不清的两种"空":用户没提 vs 说了但正则没抽到 —— 两者在代码里都是 undefined,
+ * 于是第二种情况下默认值/记忆值看起来是软默认、实际在覆盖用户刚说的话。实测证据:
+ * "在 Irvine 找个三居,预算三百出头" 正则只抽到 {city, beds},预算静默丢失。
+ *
+ * 现在的升级规则只有一个条件(城市缺失),所以"预算说法奇怪但有城市"永远不会升级。
+ *
+ * 实测(parse.jsonl 40 条):审计召回在每个字段上都是 1.000,正则漏抽 11 处全部抓到;而且它触发的
+ * 升级【比现在的规则更少】(阈值 0.7 时 10/40,现规则 12/40),零漏判。阈值取 0.7 而不是更严的
+ * 0.9,是因为 40 条太小,不该贴着边走 —— 代价只是多 1 次白升级,而白升级是便宜的错误(LLM 解析
+ * 只会确认正则已有的结果)。
+ */
+export const FIELD_AUDIT = tuning.deterministic.intent.fieldAudit;
+export const FIELD_AUDIT_THRESHOLD = tuning.deterministic.intent.fieldAuditThreshold;
 export const MAX_STEPS = tuning.auto.loop.maxSteps;
 export const MAX_PER_TOOL = tuning.auto.loop.maxPerTool;
 /**

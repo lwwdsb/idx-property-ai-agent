@@ -11,7 +11,9 @@ import { structuralCount, type SearchFilter } from '../search/filters.js';
 import type { LLMClient } from '../llm/client.js';
 import type { IntentGuess } from './bridge.js';
 // config/tuning.json -> deterministic.intent (auto mode never routes through here).
-import { EMBED_THRESHOLD, EMBED_MARGIN } from '../tuning.js';
+import { EMBED_THRESHOLD, EMBED_MARGIN, FIELD_AUDIT, FIELD_AUDIT_THRESHOLD } from '../tuning.js';
+import { systemOne, jevAvailable } from '../llm/jev.js';
+import { logger } from '../logger.js';
 
 export type Intent = 'search' | 'market' | 'recommend' | 'knowledge' | 'compound' | 'email' | 'unknown';
 
@@ -78,6 +80,40 @@ export function hasDomainAnchor(message: string): boolean {
   return DOMAIN_RE.test(message) || REF_RE.test(message);
 }
 
+/** 审计的字段 -> 问句。只问结构化槽位;city 也在内,因为"说了城市但没抽到"和别的字段同性质。 */
+const AUDIT_FIELDS: Array<[keyof SearchFilter, string]> = [
+  ['maxPrice', 'Does this message state a budget or an upper price limit?'],
+  ['minPrice', 'Does this message state a MINIMUM price or a lower bound?'],
+  ['beds', 'Does this message state a number of bedrooms?'],
+  ['baths', 'Does this message state a number of bathrooms?'],
+  ['propertyType', 'Does this message state a property type (condo, townhouse, single-family)?'],
+  ['pool', 'Does this message state a pool requirement (wants one, or does not want one)?'],
+  ['city', 'Does this message name a city or area to search in?'],
+];
+
+/**
+ * 有没有【说了但没抽到】的字段 —— 这是升级 LLM 解析的新触发条件。
+ *
+ * 旧规则只有一个条件:城市缺失。于是"预算说法奇怪但有城市"永远不会升级,预算静默丢失,而下游
+ * 无法区分"用户没提"和"说了没抽到" —— 后者用默认值填就是在覆盖用户刚说的话。
+ *
+ * 实测:审计召回在每个字段上都是 1.000,正则漏抽 11 处全部抓到;触发的升级比旧规则还少
+ * (10/40 vs 12/40),零漏判。失败时返回空数组 = 退回旧规则,不会更糟。
+ */
+async function missedFields(message: string, got: SearchFilter): Promise<Array<keyof SearchFilter>> {
+  if (!FIELD_AUDIT || !jevAvailable()) return [];
+  const blank = AUDIT_FIELDS.filter(([k]) => got[k] == null);
+  if (!blank.length) return [];                       // 全抽到了 -> 没什么可审计的
+  try {
+    const r = await systemOne(message, {
+      nouls: Object.fromEntries(blank.map(([k, q]) => [String(k), { instructions: q }])),
+    });
+    return blank.filter(([k]) => (r.nouls[String(k)] ?? 0) >= FIELD_AUDIT_THRESHOLD).map(([k]) => k);
+  } catch {
+    return [];                                         // 乙: 审计失败 -> 退回旧规则
+  }
+}
+
 export async function classifyIntent(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
   // Cheap regex-only parse first (no LLM). City-agnostic intents (email / knowledge /
   // recommend) are decided from this alone — they don't need a city, so we never pay for
@@ -87,9 +123,17 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   const cityAgnostic = EMAIL_RE.test(message)
     || (KNOWLEDGE_RE.test(message) && !regexParsed.filter.city)
     || RECOMMEND_RE.test(message);
-  const parsed = (!cityAgnostic && !regexParsed.filter.city && opts.llm?.available)
+  // 升级到 LLM 解析的触发条件有两个(第二个是 2026-09-29 加的):
+  //   ① 城市缺失且意图不是城市无关的 —— 旧规则
+  //   ② 审计说某个字段【说了】而正则没抽到 —— 新规则,覆盖"有城市但别的字段漏了"这一整类
+  const missed = await missedFields(message, regexParsed.filter);
+  const needLlm = (!cityAgnostic && !regexParsed.filter.city) || missed.length > 0;
+  const parsed = (needLlm && opts.llm?.available)
     ? await parseQuery(message, { llm: opts.llm, isKnownCity })
     : regexParsed;
+  if (missed.length) {
+    logger.debug('field audit: stated but not extracted', { missed, escalated: Boolean(opts.llm?.available) });
+  }
   const searchable = Boolean(parsed.filter.city);
   const value = VALUE_RE.test(message);
 

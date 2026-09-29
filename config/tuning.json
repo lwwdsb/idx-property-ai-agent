@@ -20,7 +20,9 @@
   "deterministic": {
     "intent": {
       "embedThreshold": 0.58,
-      "embedMargin": 0.05
+      "embedMargin": 0.05,
+      "arity": "jev",
+      "arityThreshold": 0.5
     }
   },
   "auto": {

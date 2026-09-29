@@ -29,7 +29,8 @@ export interface Tuning {
     search: { maxResults: number; tooMany: number };
     rag: { chunkSize: number; chunkOverlap: number; topK: number };
   };
-  deterministic: { intent: { embedThreshold: number; embedMargin: number } };
+  deterministic: { intent: { embedThreshold: number; embedMargin: number;
+    arity: 'regex' | 'jev'; arityThreshold: number } };
   auto: {
     loop: { maxSteps: number; maxPerTool: number; progressive: boolean; intentSelector: 'llm' | 'jev' };
     memory: { selectSemantic: number; selectEpisodic: number; fallbackSemantic: number; fallbackEpisodic: number };
@@ -57,6 +58,30 @@ export const MAX_RESULTS = tuning.shared.search.maxResults;
 export const TOO_MANY = tuning.shared.search.tooMany;
 export const EMBED_THRESHOLD = tuning.deterministic.intent.embedThreshold;
 export const EMBED_MARGIN = tuning.deterministic.intent.embedMargin;
+/**
+ * 谁来判断"这条请求是一件事还是好几件事"。
+ *
+ *   regex  detectMultiIntent —— 数有几个意图关键词命中。实测 precision 0.500 / recall 0.545
+ *          (intent.jsonl) 与 1.000 / 0.667 (mode_retrieval),是整个意图层最差的数。它的失效方式
+ *          是结构性的:关键词落在【从属位置】("email the market report" 里的 market 是宾语而不是
+ *          第二个诉求)会假多;第二个诉求换了说法("顺便看看贵不贵"不含行情词)会假单。
+ *   jev    一个类型化的是非题。实测 0.900/0.818 与 1.000/1.000,而且在后者上多意图全部落在
+ *          0.88~0.95、单意图全部落在 0.04~0.18,间隙 0.70 —— 阈值放 0.2~0.8 结果完全相同。
+ *
+ * 阈值偏低而不是偏高,因为两类错误代价不对称:漏判(多意图判成单)意味着用户问了两件事只答一件
+ * 而且【无声】,不可恢复;误判只是多花一次 LLM 调用,而 planSkills 若认定其实是单意图会返回 null
+ * 回落单路由,能自愈。
+ */
+// 枚举值在加载时校验。曾经被写成 '"jev"'(多一层引号),于是 ARITY !== 'jev' 成立、静默回落正则,
+// 而评测跑出来的数字和正则一模一样 —— 那个"完全一样"是唯一的破绽。配置里的非法枚举必须炸,
+// 不能悄悄变成"用默认行为",否则一次扫描会比较两个其实相同的配置。
+const ARITY_VALUES = ['regex', 'jev'] as const;
+if (!(ARITY_VALUES as readonly string[]).includes(tuning.deterministic.intent.arity)) {
+  throw new Error(`config/tuning.json: deterministic.intent.arity must be one of `
+    + `${ARITY_VALUES.join(' | ')}, got ${JSON.stringify(tuning.deterministic.intent.arity)}`);
+}
+export const ARITY = tuning.deterministic.intent.arity;
+export const ARITY_THRESHOLD = tuning.deterministic.intent.arityThreshold;
 export const MAX_STEPS = tuning.auto.loop.maxSteps;
 export const MAX_PER_TOOL = tuning.auto.loop.maxPerTool;
 /**

@@ -14,6 +14,8 @@ import type { SkillContext, SkillRegistry, SkillResult } from './skill.js';
 import type { LLMClient, PlanStep } from '../llm/client.js';
 import { MARKET_RE, RECOMMEND_RE, KNOWLEDGE_RE, EMAIL_RE } from './intent.js';
 import { logger } from '../logger.js';
+import { ARITY, ARITY_THRESHOLD } from '../tuning.js';
+import { systemOne, jevAvailable } from '../llm/jev.js';
 
 // A real "search" needs a constraint beyond city (else "Irvine 行情" would look like
 // search+market). city alone is shared by market/recommend and isn't a search signal.
@@ -34,6 +36,36 @@ export function detectMultiIntent(message: string, filter: SearchFilter): string
   return ORDER.filter((s) => set.has(s));
 }
 
+/**
+ * 这条请求是【一件事】还是【好几件事】。
+ *
+ * 这是一个【路由决策】而不是一个分类标签:好几件 -> 升级 LLM 一次调用拆子 query 并抽参;
+ * 一件 -> 走单工具流程。所以它的质量直接决定"会不会用户问了三件事只答了一件"。
+ *
+ * 两类错误代价不对称,这决定了整个设计的偏向:
+ *   漏判(多判成单) 用户问了两件事只答一件,而且【无声】—— 不可恢复
+ *   误判(单判成多) 多花一次 LLM 调用,而 planSkills 若认定其实是单意图会返回 null 回落 —— 自愈
+ * 所以偏向召回,阈值取低不取高。
+ *
+ * Jev 不可用时回落正则计数 —— 那是今天的行为,已知 recall 0.545,不理想但不会更糟。
+ */
+async function isMultiIntent(message: string, regexDetected: string[], llm?: LLMClient): Promise<boolean> {
+  const byRegex = regexDetected.length >= 2;
+  if (ARITY !== 'jev' || !jevAvailable()) return byRegex;
+  try {
+    const r = await systemOne(message, {
+      nouls: { multi: { instructions: 'Does this request ask the assistant to do more than ONE '
+        + 'distinct thing (e.g. find listings AND report market stats), as opposed to one request '
+        + 'with several constraints?' } },
+    });
+    const v = r.nouls.multi ?? 0;
+    logger.debug('arity via jev', { message: message.slice(0, 60), noul: v, byRegex });
+    return v >= ARITY_THRESHOLD;
+  } catch {
+    return byRegex;                                     // 乙: 判元数失败 -> 今天的行为
+  }
+}
+
 /** Returns an ordered plan of >=2 steps, or null to fall back to single-skill routing.
  * The LLM decomposes the message into per-skill sub-queries; the deterministic fallback
  * hands each skill the full message (乙). */
@@ -43,8 +75,12 @@ export async function maybePlan(
   registry: SkillRegistry,
   llm?: LLMClient,
 ): Promise<PlanStep[] | null> {
+  // 正则仍然跑,但职责变了:它不再是【闸门】,只提供"哪几个技能"这个兜底集合(当 LLM 拆不出计划时
+  // 每个技能拿到整句)。闸门交给 isMultiIntent —— 因为正则数关键词在两个方向上都不可靠。
   const detected = detectMultiIntent(message, filter);
-  if (detected.length < 2) return null;                 // gate: single intent -> normal routing
+  if (!(await isMultiIntent(message, detected, llm))) return null;   // 一件事 -> 单工具流程
+  // 闸门说是多意图但正则一个技能都没数出来:没有兜底集合可用,只能靠 LLM 的计划。
+  if (!detected.length && !(llm?.available && llm.planSkills)) return null;
 
   let plan: PlanStep[] | null = null;
   if (llm?.available && llm.planSkills) {

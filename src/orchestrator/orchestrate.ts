@@ -91,7 +91,7 @@ export async function orchestrate(
 
   // multi-skill planner (gated) — when the query wants several registry skills at once.
   // A constrained plan-then-execute, NOT an autonomous loop; skills keep their own locks.
-  const plan = await maybePlan(message, cls.filter, registry, llm);
+  const plan = await maybePlan(message, cls.filter, registry, llm, cls.multiIntent);
   if (plan) {
     logger.info('multi-skill plan', { userId, plan });
     const { reply, skills } = await executePlan(plan, ctx, registry);

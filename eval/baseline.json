@@ -111,19 +111,19 @@
   "metrics": {
     "intent_parse.metrics.json:intent.accuracy_in_set": {
       "label": "intent accuracy (in gold set)",
-      "value": 0.9068,
+      "value": 0.9746,
       "direction": "up",
       "n": 118
     },
     "intent_parse.metrics.json:intent.macro_f1": {
       "label": "intent macro-F1",
-      "value": 0.8703,
+      "value": 0.9569,
       "direction": "up",
       "n": 118
     },
     "intent_parse.metrics.json:intent.ood_reject_rate": {
       "label": "OOD rejection",
-      "value": 0.8,
+      "value": 0.9429,
       "direction": "up",
       "n": 35
     },

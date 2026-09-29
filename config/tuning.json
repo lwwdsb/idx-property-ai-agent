@@ -24,7 +24,9 @@
       "arity": "jev",
       "arityThreshold": 0.5,
       "fieldAudit": false,
-      "fieldAuditThreshold": 0.7
+      "fieldAuditThreshold": 0.7,
+      "selector": "jev",
+      "jevThreshold": 0.7
     }
   },
   "auto": {

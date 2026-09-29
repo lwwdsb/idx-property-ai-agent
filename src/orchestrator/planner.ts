@@ -51,8 +51,11 @@ export function detectMultiIntent(message: string, filter: SearchFilter): string
  *
  * Jev 不可用时回落正则计数 —— 那是今天的行为,已知 recall 0.545,不理想但不会更糟。
  */
-async function isMultiIntent(message: string, regexDetected: string[], llm?: LLMClient): Promise<boolean> {
+async function isMultiIntent(message: string, regexDetected: string[], llm?: LLMClient,
+                             known?: boolean): Promise<boolean> {
   const byRegex = regexDetected.length >= 2;
+  // 上游那一次请求已经顺带问过了 -> 直接用,别再发一次。每条消息两个往返是纯浪费。
+  if (known !== undefined) return known;
   if (ARITY !== 'jev' || !jevAvailable()) return byRegex;
   try {
     const r = await systemOne(message, {
@@ -76,11 +79,13 @@ export async function maybePlan(
   filter: SearchFilter,
   registry: SkillRegistry,
   llm?: LLMClient,
+  /** 上游 classifyIntent 那次 Jev 请求顺带答出的元数;给了就不再发第二次请求。 */
+  knownMultiIntent?: boolean,
 ): Promise<PlanStep[] | null> {
   // 正则仍然跑,但职责变了:它不再是【闸门】,只提供"哪几个技能"这个兜底集合(当 LLM 拆不出计划时
   // 每个技能拿到整句)。闸门交给 isMultiIntent —— 因为正则数关键词在两个方向上都不可靠。
   const detected = detectMultiIntent(message, filter);
-  if (!(await isMultiIntent(message, detected, llm))) return null;   // 一件事 -> 单工具流程
+  if (!(await isMultiIntent(message, detected, llm, knownMultiIntent))) return null;   // 一件事 -> 单工具流程
   // 闸门说是多意图但正则一个技能都没数出来:没有兜底集合可用,只能靠 LLM 的计划。
   if (!detected.length && !(llm?.available && llm.planSkills)) return null;
 

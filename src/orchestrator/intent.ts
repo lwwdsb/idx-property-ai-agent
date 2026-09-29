@@ -11,7 +11,8 @@ import { structuralCount, type SearchFilter } from '../search/filters.js';
 import type { LLMClient } from '../llm/client.js';
 import type { IntentGuess } from './bridge.js';
 // config/tuning.json -> deterministic.intent (auto mode never routes through here).
-import { EMBED_THRESHOLD, EMBED_MARGIN, FIELD_AUDIT, FIELD_AUDIT_THRESHOLD } from '../tuning.js';
+import { EMBED_THRESHOLD, EMBED_MARGIN, FIELD_AUDIT, FIELD_AUDIT_THRESHOLD,
+  INTENT_SELECTOR_DET, JEV_THRESHOLD, ARITY_THRESHOLD } from '../tuning.js';
 import { systemOne, jevAvailable } from '../llm/jev.js';
 import { logger } from '../logger.js';
 
@@ -33,8 +34,11 @@ export interface Classification {
   /** A city was named but we don't serve it. Surfaced so callers know the city slot is an
    * explicit (rejected) choice rather than a blank — a stored preference must not fill it. */
   rejectedCity?: string;
+  /** 元数:这条请求要求了几件事。由上游那一次 Jev 请求顺带答出(并行提问不额外增加往返),
+   * 传给计划器,省掉它自己再发一次。undefined = 没问过,计划器按老办法自己判。 */
+  multiIntent?: boolean;
   /** How the intent was decided (for logging/debugging). */
-  via?: 'rule' | 'embedding';
+  via?: 'rule' | 'embedding' | 'jev';
 }
 
 export interface ClassifyOptions {
@@ -122,7 +126,7 @@ async function missedFields(message: string, got: SearchFilter): Promise<Array<k
   }
 }
 
-export async function classifyIntent(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
+async function classifyByRules(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
   // Cheap regex-only parse first (no LLM). City-agnostic intents (email / knowledge /
   // recommend) are decided from this alone — they don't need a city, so we never pay for
   // an LLM parse just to "recover a missing city" for them. Only a search/market-type
@@ -200,4 +204,67 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   }
   return { intent: 'unknown', confidence: 'low', filter: parsed.filter, via: 'rule',
            clarification: "I can search listings, give market stats, recommend similar homes, or answer real-estate questions — what would you like?" };
+}
+
+/** 上游那一次 Jev 请求:意图 + 元数,同一个往返。并行提问的边际成本约 30 token。 */
+const JEV_INTENT_CRITERIA: Record<string, string> = {
+  search: 'Find property listings matching criteria (city, bedrooms, budget, type, features).',
+  market: 'City-level market statistics: median price, price per sqft, days on market, trend.',
+  recommend: 'Given a listing the user already likes or referred to, find similar homes.',
+  knowledge: 'Explain a real-estate term, metric or concept (what does DOM mean, how are comps computed).',
+  email: 'Draft an outbound email to a recipient, e.g. send a report to a client address.',
+  validate: 'Judge whether a specific listing is priced fairly (is it worth it, overpriced, a good deal).',
+  unknown: 'None of the above: small talk, another domain entirely, or something this real-estate '
+    + 'assistant cannot do (mortgage math, buying a house for the user, jokes).',
+};
+
+/**
+ * 确定性路径的意图判定。
+ *
+ * 正则【没有被替换】。两者都跑,然后:
+ *   一致      -> 直接执行。两个独立方法给出同一答案本身就是证据,与厂商 confidence 是否校准无关
+ *   不一致    -> Jev 够自信就采它(语义 vs 词面,语义赢),否则回落正则
+ *   Jev 不可用 -> 纯正则,就是今天的行为
+ *
+ * "不一致"这个信号是系统今天完全没有的:正则错了只能靠跑评测才发现。
+ *
+ * 同一次请求顺带问元数,结果挂在 Classification 上传给计划器 —— 否则计划器会自己再发一次,
+ * 每条消息就是两个往返。
+ */
+export async function classifyIntent(message: string, opts: ClassifyOptions = {}): Promise<Classification> {
+  const byRules = await classifyByRules(message, opts);
+  if (INTENT_SELECTOR_DET !== 'jev' || !jevAvailable()) return byRules;
+  try {
+    const r = await systemOne(message, {
+      choices: { intent: { instructions: 'What is the user asking this real-estate assistant to do? '
+        + 'Pick "unknown" if the request is outside what it handles.', criteria: JEV_INTENT_CRITERIA } },
+      nouls: { multi: { instructions: 'Does this request ask the assistant to do more than ONE '
+        + 'distinct thing (e.g. find listings AND report market stats), as opposed to one request '
+        + 'with several constraints?' } },
+    });
+    const a = r.choices.intent!;
+    const multiIntent = (r.nouls.multi ?? 0) >= ARITY_THRESHOLD;
+    if (a.choice === byRules.intent) {
+      return { ...byRules, multiIntent };                       // 一致
+    }
+    if (a.confidence >= JEV_THRESHOLD && a.choice in JEV_INTENT_CRITERIA) {
+      logger.debug('intent: jev overrides rules', { message: message.slice(0, 60),
+        rules: byRules.intent, jev: a.choice, confidence: a.confidence });
+      const intent = a.choice as Intent;
+      return {
+        ...byRules, intent, via: 'jev', multiIntent,
+        // 转成 unknown 时必须带上澄清语,否则用户收到的是一句空回复
+        clarification: intent === 'unknown'
+          ? (byRules.clarification ?? "I can search listings, give market stats, recommend similar "
+            + "homes, price-check one, or answer real-estate questions — what would you like?")
+          : byRules.clarification,
+      };
+    }
+    // 不一致且 Jev 不自信 —— 这正是"难例"的信号,按规则走但记下来
+    logger.debug('intent: disagreement, low confidence -> rules', { message: message.slice(0, 60),
+      rules: byRules.intent, jev: a.choice, confidence: a.confidence });
+    return { ...byRules, multiIntent };
+  } catch {
+    return byRules;                                             // 乙: Jev 故障 -> 今天的行为
+  }
 }

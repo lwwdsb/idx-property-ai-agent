@@ -31,7 +31,8 @@ export interface Tuning {
   };
   deterministic: { intent: { embedThreshold: number; embedMargin: number;
     arity: 'regex' | 'jev'; arityThreshold: number;
-    fieldAudit: boolean; fieldAuditThreshold: number } };
+    fieldAudit: boolean; fieldAuditThreshold: number;
+    selector: 'regex' | 'jev'; jevThreshold: number } };
   auto: {
     loop: { maxSteps: number; maxPerTool: number; progressive: boolean; intentSelector: 'llm' | 'jev' };
     memory: { selectSemantic: number; selectEpisodic: number; fallbackSemantic: number; fallbackEpisodic: number };
@@ -99,6 +100,30 @@ export const ARITY_THRESHOLD = tuning.deterministic.intent.arityThreshold;
  */
 export const FIELD_AUDIT = tuning.deterministic.intent.fieldAudit;
 export const FIELD_AUDIT_THRESHOLD = tuning.deterministic.intent.fieldAuditThreshold;
+/**
+ * 谁来决定确定性路径的意图。
+ *
+ *   regex  正则链 + embedding 兜底(今天的行为)
+ *   jev    正则与 Jev 【都跑】,然后:一致就执行;不一致时 Jev 够自信就采它,否则回落正则;
+ *          Jev 不可用就是纯正则。正则【没有被替换】,它同时是佐证信号和降级路径。
+ *
+ * 为什么用"一致/不一致"而不是直接让 Jev 说了算:两个独立方法给出同一答案,这本身就是证据,
+ * 与厂商的 confidence 校准与否无关(文档明说不保证校准)。而不一致恰好标记出难例 —— 这是系统
+ * 今天完全没有的信号:正则错了只能靠跑评测才发现。
+ *
+ * 实测(留出法 3 种子 x 2 折,gold 与选项空间已对齐):
+ *   accuracy 0.9068 -> 0.9689 · macro-F1 0.8591 -> 0.9493 · 域外拒识 0.8021 -> 0.9425
+ *   market 精度 0.6828 -> 0.8407(这一项差 0.009 没到事先定的 0.85,如实记)
+ * 阈值取 0.7:留出的 6 折分别选中 0.5/0.7/0.8,取其中位数而不是全集最优(0.9)—— 全集最优是
+ * 拿评测集挑出来的,不能当估计值用。
+ */
+const SELECTOR_VALUES = ['regex', 'jev'] as const;
+if (!(SELECTOR_VALUES as readonly string[]).includes(tuning.deterministic.intent.selector)) {
+  throw new Error(`config/tuning.json: deterministic.intent.selector must be `
+    + `${SELECTOR_VALUES.join(' | ')}, got ${JSON.stringify(tuning.deterministic.intent.selector)}`);
+}
+export const INTENT_SELECTOR_DET = tuning.deterministic.intent.selector;
+export const JEV_THRESHOLD = tuning.deterministic.intent.jevThreshold;
 export const MAX_STEPS = tuning.auto.loop.maxSteps;
 export const MAX_PER_TOOL = tuning.auto.loop.maxPerTool;
 /**

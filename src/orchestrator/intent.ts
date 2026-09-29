@@ -65,8 +65,16 @@ const VALUE_RE = /\b(priced? (fair|right|well)|worth it|good deal|overpriced|und
  */
 const DOMAIN_RE = /\b(?:homes?|houses?|propert(?:y|ies)|listings?|condos?|townhouses?|apartments?|real ?estate|mls|dom|days on market|sold[- ]to[- ]list|comps?|contingen(?:t|cy|cies)|pending|escrow|price per|per sq\.?\s?ft|square (?:foot|feet)|sqft|bed(?:room)?s?|bath(?:room)?s?|yard|pool|garage|zip|neighborhood|school district|hoa)\b|房|套|户|居室|卧|卫|平米|平尺|学区|房源|房产|成交|挂牌|字段|列名/i;
 const REF_RE = /#\s*\d+|\b(?:first|second|third|fourth|fifth|1st|2nd|3rd)\b|\bthat one\b|\bthis one\b|第\s*[一二两三四五六七八九十\d]|这套|那套|这个|刚才|\b\d{6,}\b/i;
-/** True when the message mentions the domain at all (property vocabulary or a listing reference). */
+/** True when the message mentions the domain at all (property vocabulary or a listing reference).
+ *
+ * MEASUREMENT-ONLY ESCAPE HATCH. Setting IDX_NO_DOMAIN_ANCHOR=1 makes this always true, which
+ * un-does the anchor tightening that took out-of-domain rejection from 0.63 to 0.80. It exists
+ * because that tightening is the thing a typed classifier would replace: the question "can we STOP
+ * adding regex rules and let a classifier own the tail" cannot be measured while the rules are
+ * still catching the tail. Never set it in production — it deliberately makes the router greedier.
+ */
 export function hasDomainAnchor(message: string): boolean {
+  if (process.env.IDX_NO_DOMAIN_ANCHOR === '1') return true;
   return DOMAIN_RE.test(message) || REF_RE.test(message);
 }
 

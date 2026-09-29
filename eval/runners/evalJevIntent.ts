@@ -1,103 +1,137 @@
 /**
- * 第三条臂:Jev 在 auto 的"选哪个工具"这一步上,对比 LLM 的 function calling。
+ * Jev 做意图识别 —— 在确定性路径的 118 条意图集上,对比现状。
  *
- * 为什么能直接对比:`mode_retrieval.jsonl` 44 条同时标了 `gold.intents`,而 auto 臂
- * (`auto_tools`)与确定性臂(`regex_intent`)已经在同一批 query 上测过。这里只往同一个预测文件
- * 里补一列 `jev_tools`,由同一个报告脚本用同一套指标算分 —— 换臂不换尺子。
+ * 为什么是这一面而不是 auto:auto 的工具选择已经命中 1.00、域外 5/5,上限只剩约 5%,而接进去要
+ * 付"多一次往返"或"把一回合多工具逼成多回合"的代价(progressive 就是这么输的)。确定性这一面
+ * 相反,有一个已测出来的空洞:
  *
- * 公平性上刻意做的两件事:
- *   同样的工具描述  Choice 的选项描述直接取注册表里的 skill description,也就是 LLM 作为
- *                   function tool 描述看到的同一段文字。否则比的是 prompt 措辞,不是模型。
- *   同样的域外表达  auto 用"不调任何工具"表示域外,所以 Choice 多给一个显式的 none 选项,
- *                   让两条臂有同一种说"都不适用"的方式。
+ *   放开正则单测 embedding,118 条上 accuracy 0.576 / macro-F1 0.527,而且没有可用工作点 ——
+ *   生产阈值下域内误拒 46%,把域内误拒压到 5% 则域外拒识掉到 0.457。原因在分布:score<0.58 只
+ *   拦 2/35 域外,27/35 的域外分数落在域内取值范围内;全部工作是 margin 在做,而它同时拦掉
+ *   38/83 域内。它的标签空间还只有 5 个技能,没有 unknown 也没有 compound。
  *
- * 另外免费搭一个多标签变体:`gold.intents` 是列表,而 Choice 严格单选,所以 compound 用例它
- * 结构上最多只能答对一个。同一个请求里可以并行问多个问题、不额外增加往返,所以顺带对每个工具
- * 各问一个 noul("这个任务需要它吗"),按阈值得到一个集合 —— 报告里作为 `jev_multi` 单独看。
- * 这一列的存在本身就是个诚实性检查:如果单选臂的失分几乎都在 compound 上,那不是能力差距。
+ * 也就是说:正则不是两层里的一层,它就是全部系统(118 条里 114 条由规则决定),后面没有能用的
+ * 兜底。所以这里要验的不是"能不能赢过 0.90",而是【能不能补上那个不存在的兜底层】。
  *
- *   npx tsx eval/runners/evalJevIntent.ts            # 需要 TYPESAFE_API_KEY
- *   npx tsx eval/runners/evalJevIntent.ts --dry       # 不调用,只打印会发出去的请求
+ * Jev 在这件事上有个结构性优势:unknown 可以作为【显式选项】交给它选,把"弃权"从阈值问题变成
+ * 分类问题 —— 正好绕开 embedding 栽在上面的那道坎(厂商也明说 confidence 没有校准保证)。
+ *
+ * 三种配置:
+ *   all       118 条全交给 Jev。看它单独的天花板,和 embedding-only 那条臂直接可比
+ *   residue   只接【规则没定案】的那些(现在是走到 embedding 门或落到最后 unknown 的用例)。
+ *             这是我建议的生产形状:常见请求仍走 4ms 的正则,只有难例付网络代价
+ *   无锚点     先用 IDX_NO_DOMAIN_ANCHOR=1 重跑 evalIntentParse,残余集会变大(实测域外拒识
+ *             掉回 0.657),再跑 residue —— 验证"能不能停止再加正则规则"
+ *
+ *   npx tsx eval/runners/evalJevIntent.ts --dry
+ *   npx tsx eval/runners/evalJevIntent.ts --config all
+ *   npx tsx eval/runners/evalJevIntent.ts --config residue
+ *   IDX_NO_DOMAIN_ANCHOR=1 npx tsx eval/runners/evalIntentParse.ts   # 先重算残余
+ *   npx tsx eval/runners/evalJevIntent.ts --config residue --tag no-anchors
  */
-import '../../src/testEnv.js';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
-import { systemOne, toolChoiceSpec, jevAvailable, JEV_NONE } from '../../src/llm/jev.js';
-import { buildRegistry } from '../../src/orchestrator/skills.js';
-import type { PythonBridge } from '../../src/search/pythonBridge.js';
-import type { DraftStore } from '../../src/email/draftStore.js';
+import { systemOne, jevAvailable, type ChoiceSpec } from '../../src/llm/jev.js';
 
 const HERE = new URL('.', import.meta.url).pathname;
-const DATASET = `${HERE}../datasets/mode_retrieval.jsonl`;
-const PREDS = `${HERE}../history/mode_retrieval.preds.jsonl`;
+const DATASET = `${HERE}../datasets/intent.jsonl`;
+const PIPELINE_PREDS = `${HERE}../history/intent.preds.jsonl`;
+const OUT = `${HERE}../history`;
+
+const arg = (k: string, d?: string) => {
+  const i = process.argv.indexOf(`--${k}`);
+  return i >= 0 && process.argv[i + 1] ? process.argv[i + 1]! : d;
+};
+const CONFIG = arg('config', 'all')!;
+const TAG = arg('tag', CONFIG)!;
 const DRY = process.argv.includes('--dry');
-/** 多标签阈值:noul 是 0-1 的信念值,文档没有校准保证,所以 0.5 只是起点,后面按数据调。 */
-const NOUL_T = Number(process.env.JEV_NOUL_THRESHOLD || 0.5);
+
+/**
+ * 选项描述。刻意写成"这个意图在本系统里是什么",而不是照着测试集的用例反推 —— 后者会把测试集
+ * 的表达方式泄漏进 prompt,量出来的就不是泛化能力。compound 和 unknown 也给成显式选项,因为
+ * 它们都是 gold 里的类,而 embedding 那一层结构上答不出它们。
+ */
+const INTENT_CRITERIA: Record<string, string> = {
+  search: 'Find property listings matching criteria (city, bedrooms, budget, type, features).',
+  market: 'City-level market statistics: median price, price per sqft, days on market, trend.',
+  recommend: 'Given a listing the user already likes or referred to, find similar homes.',
+  knowledge: 'Explain a real-estate term, metric or concept (what does DOM mean, how are comps computed).',
+  email: 'Draft an outbound email to a recipient, e.g. send a report to a client address.',
+  compound: 'BOTH a listing search AND a judgement about whether the price is fair — two things at once.',
+  unknown: 'None of the above: small talk, another domain entirely, or something this '
+    + 'real-estate assistant cannot do (mortgage math, buying a house for the user, jokes).',
+};
+
+const choiceSpec: ChoiceSpec = {
+  instructions: 'What is the user asking this real-estate assistant to do? '
+    + 'Pick "unknown" if the request is outside what it handles.',
+  criteria: INTENT_CRITERIA,
+};
 
 const cases = readFileSync(DATASET, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
-const registry = buildRegistry({} as PythonBridge, {} as DraftStore);
-const tools = registry.list().map((s) => ({ name: s.name, description: s.description }));
-const choiceSpec = toolChoiceSpec(tools);
-const nouls = Object.fromEntries(tools.map((t) => [
-  `need_${t.name}`,
-  { instructions: `Does this request require the "${t.name}" tool? ${t.description}` },
-]));
+
+/** 规则没定案的那些:走到 embedding 门被采纳(via='embedding'),或落到最后的 unknown。
+ *  从流水线的预测文件里读,而不是在这里重新实现一遍判定 —— 两份实现会漂移。 */
+function residueIds(): Set<string> {
+  if (!existsSync(PIPELINE_PREDS)) {
+    throw new Error(`没有 ${PIPELINE_PREDS} —— 先跑 npx tsx eval/runners/evalIntentParse.ts`);
+  }
+  const ids = new Set<string>();
+  for (const l of readFileSync(PIPELINE_PREDS, 'utf8').trim().split('\n').filter(Boolean)) {
+    const r = JSON.parse(l) as { id: string; via?: string; pred: string };
+    if (r.via === 'embedding' || r.pred === 'unknown') ids.add(r.id);
+  }
+  return ids;
+}
+
+const selected = CONFIG === 'all' ? cases : (() => {
+  const ids = residueIds();
+  return cases.filter((c) => ids.has(c.id));
+})();
 
 if (DRY) {
-  console.log(`工具选项(${tools.length + 1} 个,含显式 none):`);
-  for (const [k, v] of Object.entries(choiceSpec.criteria)) console.log(`  ${k}: ${String(v).slice(0, 78)}`);
-  console.log(`\n并行的 noul 问题:${Object.keys(nouls).length} 个`);
-  console.log(`用例:${cases.length} 条 · 每条 1 个请求(1 个 choice + ${Object.keys(nouls).length} 个 noul)`);
-  console.log(`\n示例 state:${JSON.stringify(cases[0].input)}`);
+  console.log(`配置 ${CONFIG} · tag ${TAG}`);
+  console.log(`选项(${Object.keys(INTENT_CRITERIA).length} 个,含显式 compound 与 unknown):`);
+  for (const [k, v] of Object.entries(INTENT_CRITERIA)) console.log(`  ${k.padEnd(10)} ${v.slice(0, 76)}`);
+  console.log(`\n用例:${selected.length} / ${cases.length} 条`);
+  if (CONFIG !== 'all') {
+    const g = selected.filter((c) => c.label.intents.includes('unknown')).length;
+    console.log(`  其中域外 ${g} 条 / 域内 ${selected.length - g} 条`);
+  }
+  console.log(`预估输入 token ≈ ${selected.length * 300} → 成本 ≈ $${(selected.length * 300 / 1e6 * 0.042).toFixed(5)}`);
   process.exit(0);
 }
 if (!jevAvailable()) {
-  console.error('TYPESAFE_API_KEY 未设置 —— 先到 console.typesafe.ai 拿 key 并写进 .env。');
-  console.error('想先看会发什么请求:npx tsx eval/runners/evalJevIntent.ts --dry');
+  console.error('TYPESAFE_API_KEY 未设置 —— 到 console.typesafe.ai 拿 key 并写进 .env。');
+  console.error('先看会发什么:npx tsx eval/runners/evalJevIntent.ts --dry --config ' + CONFIG);
   process.exit(1);
 }
 
-// 预测文件按 id 合并而不是覆盖:另外两条臂的结果必须原样留着,否则就没得比了。
-const existing = new Map<string, Record<string, unknown>>();
-if (existsSync(PREDS)) {
-  for (const l of readFileSync(PREDS, 'utf8').trim().split('\n').filter(Boolean)) {
-    const r = JSON.parse(l) as { id: string };
-    existing.set(r.id, r as Record<string, unknown>);
-  }
-}
-
-let inTok = 0, outTok = 0, failed = 0;
-const t0 = Date.now();
+let inTok = 0, failed = 0;
 const lat: number[] = [];
+const rows: Array<Record<string, unknown>> = [];
 
-for (const c of cases) {
-  const row = existing.get(c.id) ?? { id: c.id };
+for (const c of selected) {
   try {
     const s = Date.now();
-    const r = await systemOne(c.input, { choices: { tool: choiceSpec }, nouls });
+    const r = await systemOne(c.input, { choices: { intent: choiceSpec } });
     lat.push(Date.now() - s);
-    inTok += r.usage.inputTokens; outTok += r.usage.outputTokens;
-    const a = r.choices.tool!;
-    // none => 空数组,和 auto 臂"不调任何工具"表示域外的方式一致。
-    row.jev_tools = a.choice === JEV_NONE ? [] : [a.choice];
-    row.jev_confidence = a.confidence;
-    row.jev_margin = a.margin;
-    row.jev_probabilities = a.probabilities;
-    row.jev_multi = tools.map((t) => t.name).filter((n) => (r.nouls[`need_${n}`] ?? 0) >= NOUL_T);
-    row.jev_nouls = r.nouls;
-    console.log(`  ${c.id}  choice=${a.choice.padEnd(10)} conf=${a.confidence.toFixed(3)} `
-      + `margin=${a.margin.toFixed(3)}  multi=[${(row.jev_multi as string[]).join(',')}]  gold=[${c.gold.intents.join(',')}]`);
+    inTok += r.usage.inputTokens;
+    const a = r.choices.intent!;
+    const ok = c.label.intents.includes(a.choice);
+    rows.push({ id: c.id, input: c.input, gold: c.label.intents, pred: a.choice,
+      confidence: a.confidence, margin: a.margin, probabilities: a.probabilities, hit: ok });
+    console.log(`  ${ok ? '✓' : '✗'} ${c.id}  ${a.choice.padEnd(10)} conf=${a.confidence.toFixed(3)} `
+      + `margin=${a.margin.toFixed(3)}  gold=[${c.label.intents.join(',')}]`);
   } catch (e) {
     failed += 1;
-    row.jev_error = String(e).slice(0, 160);
-    console.log(`  ${c.id}  ✗ ${row.jev_error}`);
+    rows.push({ id: c.id, input: c.input, gold: c.label.intents, pred: 'error', error: String(e).slice(0, 160) });
+    console.log(`  ✗ ${c.id}  ${String(e).slice(0, 100)}`);
   }
-  existing.set(c.id, row);
 }
 
-writeFileSync(PREDS, [...existing.values()].map((r) => JSON.stringify(r)).join('\n') + '\n');
-const p = (q: number) => (lat.length ? lat.sort((a, b) => a - b)[Math.min(lat.length - 1, Math.round(q / 100 * (lat.length - 1)))] : 0);
-const cost = inTok / 1e6 * 0.042;   // 输出免费
-console.log(`\njev 臂写入 ${cases.length} 条(失败 ${failed})`);
-console.log(`  延迟 p50 ${p(50)}ms · p95 ${p(95)}ms · max ${p(100)}ms · 总耗时 ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-console.log(`  token 输入 ${inTok} / 输出 ${outTok}(免费) · 本次成本 ≈ $${cost.toFixed(5)}`);
-console.log(`\n跑报告看三臂对比:python3 eval/runners/report_mode_intent.py`);
+writeFileSync(`${OUT}/jev_intent.${TAG}.preds.jsonl`, rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
+const p = (q: number) => (lat.length ? [...lat].sort((a, b) => a - b)[Math.min(lat.length - 1, Math.round(q / 100 * (lat.length - 1)))] : 0);
+console.log(`\n配置 ${CONFIG} · ${selected.length} 条(失败 ${failed})`);
+console.log(`  延迟 p50 ${p(50)}ms · p95 ${p(95)}ms · max ${p(100)}ms`);
+console.log(`  输入 token ${inTok} · 成本 ≈ $${(inTok / 1e6 * 0.042).toFixed(5)}(输出免费)`);
+console.log(`\n算分:python3 eval/runners/report_jev_intent.py ${TAG}`);

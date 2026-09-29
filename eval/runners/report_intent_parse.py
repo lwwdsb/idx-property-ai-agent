@@ -35,6 +35,54 @@ def _reject_rate(preds):
     return round(correct / len(out), 4), len(out)
 
 
+def _embedding_only(preds):
+    """把规则全部绕开,让 embedding 分类器独自决定全部 118 条 —— 回答"那一层单独有多强"。
+
+    这和下面 _sweep_threshold 的口径【不同】,区别很重要:那里只替换"流水线本来会去问门禁"的
+    用例(规则已经先筛过一轮),是在还原真实流水线;这里让 embedding 面对所有输入,包括规则本来
+    会直接定案的那 114 条。
+
+    两个结构性上限,先说清楚,否则会把它的分数误读成能力不足:
+      1. 分类器的标签空间只有 5 个技能,【没有 unknown、没有 compound】。所以域外只能靠阈值
+         卡掉(拒识是"不够自信"的副产品,不是一个可预测的类),而 compound 它永远答不对。
+      2. 现在生产用的 0.58 / 0.05 是在"规则先筛过"的前提下扫出来的。规则一放开,它面对的输入
+         分布完全变了,那组值没有理由仍是最优 —— 所以这里连带扫一遍。
+    """
+    def gate(p, t, mg):
+        return (p.get("topScore") is not None and p["topScore"] >= t
+                and p.get("topMargin") is not None and p["topMargin"] >= mg
+                and p.get("topSkill") in ROUTABLE)
+
+    def pred_at(p, t, mg):
+        return p["topSkill"] if gate(p, t, mg) else "unknown"
+
+    ind = [p for p in preds if "unknown" not in p["gold"]]
+    ood = [p for p in preds if "unknown" in p["gold"]]
+
+    rows = []
+    for t in [round(x / 100, 2) for x in range(40, 86, 2)]:
+        for mg in (0.0, 0.02, 0.05, 0.08, 0.12):
+            pairs = [(p["gold"][0], pred_at(p, t, mg)) for p in preds]
+            rep = classification_report(pairs)
+            rows.append({
+                "t": t, "margin": mg,
+                "accuracy": round(rep["accuracy"], 4),
+                "macro_f1": round(rep["macro_f1"], 4),
+                "ood_reject": round(sum(1 for p in ood if pred_at(p, t, mg) == "unknown") / len(ood), 4) if ood else None,
+                # 域内被误拒:embedding 单独跑时这个代价会明显上升,因为它没有规则兜底
+                "in_domain_rejected": round(sum(1 for p in ind if pred_at(p, t, mg) == "unknown") / len(ind), 4) if ind else None,
+            })
+    at_prod = next(r for r in rows if r["t"] == 0.58 and r["margin"] == 0.05)
+    best_f1 = max(rows, key=lambda r: r["macro_f1"])
+    # 安全优先的选法,与现有扫描同一条准则:域内误拒不超过 5% 的前提下最大化域外拒识
+    safe = [r for r in rows if (r["in_domain_rejected"] or 0) <= 0.05]
+    best_ood = max(safe, key=lambda r: r["ood_reject"] or 0) if safe else None
+    return {"at_production_gate": at_prod, "best_macro_f1": best_f1, "best_ood_under_5pct": best_ood,
+            "n": len(preds), "n_in_domain": len(ind), "n_ood": len(ood),
+            "label_space": sorted(ROUTABLE), "note":
+            "标签空间无 unknown/compound:域外拒识是阈值的副产品,compound 结构上答不对"}
+
+
 def _sweep_threshold(preds):
     """Find the global EMBED_THRESHOLD that best separates in-domain (route to the right
     intent) vs out-of-domain (fall to unknown), using the recorded classifier top score.
@@ -112,6 +160,8 @@ def intent_metrics():
     rep["ood_reject_rate"] = rej
     rep["n_out_of_domain"] = n_out
     rep["threshold_sweep"] = _sweep_threshold(preds)
+    # 规则全部绕开时,embedding 那一层单独有多强 —— 与上面的流水线口径不同,见函数注释
+    rep["embedding_only"] = _embedding_only(preds)
     # surface the misses for inspection
     rep["misses"] = [{"input": p["input"], "gold": p["gold"], "pred": p["pred"]}
                      for p in preds if p["pred"] not in p["gold"]]

@@ -130,34 +130,35 @@ t('"cancel N" cancels a pending draft', async () => {
   assert.match(r.reply, /cancelled/i);
 });
 
-// ---- compound recipe (search -> validate) ----
+// ---- 多技能计划(原 compound 配方已拆成 validate 技能 + 计划器)----
 t('multi-intent (search + market) -> planner runs both skills', async () => {
   // no-LLM planner => deterministic detected set [search, market]
   const r = await orchestrate('u', '在 Irvine 找 3 居室，再看看这个城市的行情', { ...opts, llm: noLLM });
-  assert.equal(r.intent, 'compound');
+  assert.equal(r.intent, 'multi');
   assert.match(r.reply, /Current filter|match/i);        // search part
   assert.match(r.reply, /median|sales|No recent/i);       // market part
   assert.ok((r.skill ?? '').includes('+'), 'composed multiple skills');
 });
 t('planner: LLM decomposes into per-skill sub-queries, runs both', async () => {
   const r = await orchestrate('u', '在 Irvine 找 3 居室，再看看行情', { ...opts, llm: planLLM });
-  assert.equal(r.intent, 'compound');
+  assert.equal(r.intent, 'multi');
   assert.ok((r.skill ?? '').includes('search') && (r.skill ?? '').includes('market'), 'both skills ran');
   assert.match(r.reply, /Current filter|match/i);
   assert.match(r.reply, /median|sales|No recent/i);
 });
 t('single intent does NOT trigger the planner', async () => {
   const r = await orchestrate('u', '在 Irvine 找 3 居室 200万以下', { ...opts, llm: noLLM });
-  assert.equal(r.intent, 'search');                       // stays single, no compound
+  assert.equal(r.intent, 'search');                       // 单意图,不进计划器
 });
 t('"days on market" question does NOT falsely plan (substring trap)', async () => {
   const r = await orchestrate('u', 'what is days on market?', { ...opts, llm: noLLM });
-  assert.equal(r.intent, 'knowledge');                    // not market, not compound
+  assert.equal(r.intent, 'knowledge');                    // 不是 market,也不进计划器
 });
 
-t('compound: search + price validate chained', async () => {
+t('搜索 + 估价:由计划器拆成两个技能,而不是一条写死的配方', async () => {
   const r = await orchestrate('u', '帮我在 Irvine 找 3 居室，顺便看看贵不贵', opts);
-  assert.equal(r.intent, 'compound');
+  assert.equal(r.intent, 'multi');
+  assert.ok((r.skill ?? '').includes('validate'), 'validate 作为一个技能被跑到了');
   assert.match(r.reply, /price check/i);
   assert.match(r.reply, /in line with recent comparable/i); // from fake validate
   assert.ok(calls.some((c) => c.startsWith('validate:')), 'validate was invoked');

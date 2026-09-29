@@ -12,7 +12,7 @@
 import type { SearchFilter } from '../search/filters.js';
 import type { SkillContext, SkillRegistry, SkillResult } from './skill.js';
 import type { LLMClient, PlanStep } from '../llm/client.js';
-import { MARKET_RE, RECOMMEND_RE, KNOWLEDGE_RE, EMAIL_RE } from './intent.js';
+import { MARKET_RE, RECOMMEND_RE, KNOWLEDGE_RE, EMAIL_RE, VALUE_RE } from './intent.js';
 import { logger } from '../logger.js';
 import { ARITY, ARITY_THRESHOLD } from '../tuning.js';
 import { systemOne, jevAvailable } from '../llm/jev.js';
@@ -20,7 +20,8 @@ import { systemOne, jevAvailable } from '../llm/jev.js';
 // A real "search" needs a constraint beyond city (else "Irvine 行情" would look like
 // search+market). city alone is shared by market/recommend and isn't a search signal.
 const SEARCH_CONSTRAINTS: Array<keyof SearchFilter> = ['beds', 'baths', 'maxPrice', 'minPrice', 'propertyType', 'pool', 'minSqft'];
-const ORDER = ['search', 'market', 'recommend', 'knowledge', 'email'];
+// validate 紧跟在 search 之后:它要看前一步搜出来的东西
+const ORDER = ['search', 'validate', 'market', 'recommend', 'knowledge', 'email'];
 const MAX_PLAN = 3;
 
 /** Distinct intent types present in the message (canonical order). */
@@ -33,6 +34,7 @@ export function detectMultiIntent(message: string, filter: SearchFilter): string
   if (RECOMMEND_RE.test(message)) set.add('recommend');
   if (KNOWLEDGE_RE.test(message)) set.add('knowledge');
   if (EMAIL_RE.test(message)) set.add('email');
+  if (VALUE_RE.test(message)) set.add('validate');   // 兜底集合也要含估价,否则计划拆不出它
   return ORDER.filter((s) => set.has(s));
 }
 

@@ -111,13 +111,13 @@
   "metrics": {
     "intent_parse.metrics.json:intent.accuracy_in_set": {
       "label": "intent accuracy (in gold set)",
-      "value": 0.8983,
+      "value": 0.9068,
       "direction": "up",
       "n": 118
     },
     "intent_parse.metrics.json:intent.macro_f1": {
       "label": "intent macro-F1",
-      "value": 0.8384,
+      "value": 0.8703,
       "direction": "up",
       "n": 118
     },

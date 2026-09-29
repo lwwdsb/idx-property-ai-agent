@@ -71,11 +71,7 @@ const INTENT_CRITERIA: Record<string, string> = {
   recommend: 'Given a listing the user already likes or referred to, find similar homes.',
   knowledge: 'Explain a real-estate term, metric or concept (what does DOM mean, how are comps computed).',
   email: 'Draft an outbound email to a recipient, e.g. send a report to a client address.',
-  // compound 补回来【只为公平对比】:现状系统有一条规则能答它,给 Jev 更小的标签空间再比 macro-F1
-  // 就不是同一把尺子 —— 首轮实测 8 条错里 3 条是 compound,单这一类为 0 就在 7 类里拖掉约 0.14。
-  // 架构上我仍然认为它不该是一个类(它是"搜索+估价"这一个特定组合的伪类,三个意图就表达不了),
-  // 但那是该不该改 gold 的问题,不该用"换一把更小的尺子"来回避。
-  compound: 'BOTH a listing search AND a judgement about whether the price is fair — two things at once.',
+  validate: 'Judge whether a specific listing is priced fairly (is it worth it, overpriced, a good deal).',
   unknown: 'None of the above: small talk, another domain entirely, or something this '
     + 'real-estate assistant cannot do (mortgage math, buying a house for the user, jokes).',
 };

@@ -15,7 +15,15 @@ import { EMBED_THRESHOLD, EMBED_MARGIN, FIELD_AUDIT, FIELD_AUDIT_THRESHOLD } fro
 import { systemOne, jevAvailable } from '../llm/jev.js';
 import { logger } from '../logger.js';
 
-export type Intent = 'search' | 'market' | 'recommend' | 'knowledge' | 'compound' | 'email' | 'unknown';
+/**
+ * 路由目标。
+ *
+ * 'compound' 曾经在这里,而它是错的:它把【搜索+估价】这一个特定组合硬编码成一个类,所以三个意图
+ * 或别的组合都表达不了。已拆成两样:'validate' 是一个真实的、独立的诉求("这套值不值这个价"),
+ * 'multi' 不是一个意图而是【计划器跑了多个技能】这个事实的标签 —— 具体是哪几个由 skill 字段说。
+ */
+export type Intent = 'search' | 'market' | 'recommend' | 'knowledge' | 'validate' | 'email' | 'unknown'
+  | 'multi';
 
 export interface Classification {
   intent: Intent;
@@ -46,7 +54,7 @@ export const MARKET_RE = /\b(market|median|average price|avg price|price per|per
 export const RECOMMEND_RE = /\b(similar|recommend|comparable|like this|more like|anything like|like the (first|second|third|\d+))\b|类似|相似|推荐|像这套|差不多的/i;
 export const KNOWLEDGE_RE = /\b(what is|what's|what does|how (is|are|do)|explain|define|definition|meaning|stand for)\b|什么是|怎么算|怎么计算|如何计算|什么意思|定义|表示什么|哪个字段|哪个列/i;
 export const EMAIL_RE = /\be-?mail\b|发邮件|发送邮件|邮件发给|[^@\s]+@[^@\s]+\.[^@\s]+/i;
-const VALUE_RE = /\b(priced? (fair|right|well)|worth it|good deal|overpriced|underpriced|fair price|is it worth)\b|贵不贵|值不值|合理吗|价格合理|划算/i;
+export const VALUE_RE = /\b(priced? (fair|right|well)|worth it|good deal|overpriced|underpriced|fair price|is it worth)\b|贵不贵|值不值|合理吗|价格合理|划算/i;
 
 /**
  * Domain anchor for the two rules that match on a bare INTENT VERB rather than on
@@ -142,10 +150,6 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   if (EMAIL_RE.test(message)) {
     return { intent: 'email', confidence: 'high', filter: parsed.filter, via: 'rule' };
   }
-  // compound: a real search + a "is it priced fairly" question -> recipe
-  if (searchable && value) {
-    return { intent: 'compound', confidence: 'high', filter: parsed.filter };
-  }
   // knowledge (definitional, no city) — checked before market so "what is days on
   // MARKET" isn't misread as a market-stats query by the substring "market".
   if (KNOWLEDGE_RE.test(message) && !searchable && hasDomainAnchor(message)) {
@@ -160,6 +164,15 @@ export async function classifyIntent(message: string, opts: ClassifyOptions = {}
   // recommendation
   if (RECOMMEND_RE.test(message) && hasDomainAnchor(message)) {
     return { intent: 'recommend', confidence: 'high', filter: parsed.filter, via: 'rule' };
+  }
+
+  // 估价 —— 放在 recommend 【之后】。"similar to the first and are they overpriced" 里
+  // "overpriced" 会命中估价词,但它主要是个推荐诉求;推荐先判就不会被抢走。
+  // 估价:"这套值不值这个价"。以前这里是 `searchable && value -> compound`,把【搜索+估价】
+  // 这一个特定组合硬编码成一个伪类 —— 三个意图或别的组合都表达不了。现在估价是一个独立技能,
+  // 而"搜索 + 估价"由元数闸门判成多意图、交给计划器拆,所以这里只需要认出【纯估价】的情形。
+  if (value && !searchable) {
+    return { intent: 'validate', confidence: 'high', filter: parsed.filter, via: 'rule' };
   }
   // plain search
   if (searchable) {

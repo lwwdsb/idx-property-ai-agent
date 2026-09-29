@@ -244,6 +244,39 @@ export function buildRegistry(bridge: PythonBridge, draftStore: DraftStore = new
       },
     })
     .register({
+      /**
+       * 价格判定 —— "这套值不值这个价"。
+       *
+       * 它从 orchestrate 里那条写死的 compound 配方提取出来。配方是 search -> 取第一条 ->
+       * bridge.validate,而 compound 作为一个"意图类别"是错的:它把【搜索+估价】这一个特定组合
+       * 硬编码成一个伪类,所以三个意图、或者别的组合都表达不了。拆成技能之后:
+       *   "找 3 居室,顺便看看贵不贵"  -> 多意图 {search, validate},由计划器拆解
+       *   "这套值不值这个价"          -> 单意图 {validate}
+       * 任意组合都能表达,而能力一点没少。e2e-014 的注释里本来就写着该有这么一个子技能。
+       *
+       * parallelSafe = false:它要看【前一步搜出来的东西】,所以必须串行在 search 之后。
+       */
+      name: 'validate',
+      description: 'Judge whether a listing is priced fairly (a specific one by id/MLS, a referenced one, or the top result just shown).',
+      parallelSafe: false,
+      async run(ctx) {
+        const s = await defaultSessionStore.get(ctx.userId);
+        const rows = s?.lastResults;
+        let id = extractId(ctx.message);
+        if (id === undefined) id = resolveListingRef(ctx.message, rows);
+        // 没有明确指代时取刚展示的第一条 —— 这正是旧 compound 配方的行为(它验的是 rows[0])
+        const row = id !== undefined ? rows?.find((r) => r.id === id) : rows?.[0];
+        if (!row) {
+          return { skill: 'validate', reply: 'Which listing should I price-check? Search first, or send its id / MLS number.' };
+        }
+        let verdict = 'price check unavailable';
+        try {
+          verdict = (JSON.parse(await bridge.validate(row)) as { verdict?: string }).verdict ?? verdict;
+        } catch { /* 乙: 判定失败不得让回复崩掉 */ }
+        return { skill: 'validate', reply: `💰 Price check: ${verdict}`, data: { listingId: row.id, verdict } };
+      },
+    })
+    .register({
       name: 'knowledge',
       description: 'Answer real-estate questions (DOM, $/sqft, comps, field meanings) with sources.',
       async run(ctx) {

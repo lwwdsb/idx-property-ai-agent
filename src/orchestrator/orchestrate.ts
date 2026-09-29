@@ -86,24 +86,8 @@ export async function orchestrate(
 
   const ctx = { userId, message, filter: cls.filter, llm, filterDefaults: opts.filterDefaults };
 
-  // compound recipe: search, then validate the top result's price (fixed chain)
-  if (cls.intent === 'compound') {
-    const search = await registry.get('search')!.run(ctx);
-    const rows = (search.data as { rows?: ListingRow[] } | undefined)?.rows;
-    if (!rows?.length) {
-      return { intent: 'compound', skill: 'search', reply: search.reply };
-    }
-    const top = rows[0]!;
-    let verdict = 'price check unavailable';
-    try {
-      verdict = (JSON.parse(await bridge.validate(top)) as { verdict?: string }).verdict ?? verdict;
-    } catch { /* 乙: validation failure must not break the reply */ }
-    return {
-      intent: 'compound',
-      skill: 'search+validate',
-      reply: `${search.reply}\n\n💰 Top result price check: ${verdict}`,
-    };
-  }
+  // (原 compound 配方已删除:它是写死的 search->validate 链,现在 validate 是一个技能,
+  //  "搜索+估价"由元数闸门判成多意图后交给计划器 —— 任意组合都能表达,能力没少。)
 
   // multi-skill planner (gated) — when the query wants several registry skills at once.
   // A constrained plan-then-execute, NOT an autonomous loop; skills keep their own locks.
@@ -111,7 +95,7 @@ export async function orchestrate(
   if (plan) {
     logger.info('multi-skill plan', { userId, plan });
     const { reply, skills } = await executePlan(plan, ctx, registry);
-    return { intent: 'compound', skill: skills.join('+'), reply };
+    return { intent: 'multi', skill: skills.join('+'), reply };
   }
 
   const skill = registry.get(cls.intent);

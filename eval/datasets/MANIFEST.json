@@ -9,14 +9,14 @@
       "note": "auto/agent 主集。2026-09-28 从 14 加到 21 条(补顺序依赖任务),因此 v2"
     },
     "e2e.jsonl": {
-      "version": 1,
-      "sha256_16": "97a7723ba4cb3db5",
+      "version": 2,
+      "sha256_16": "04e626b0bcdc60d6",
       "lines": 25,
       "frozen": true
     },
     "intent.jsonl": {
-      "version": 1,
-      "sha256_16": "e34d0241e8a0543d",
+      "version": 2,
+      "sha256_16": "b4bc16c73ffde1d5",
       "lines": 118,
       "frozen": true
     },

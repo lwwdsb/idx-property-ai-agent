@@ -30,7 +30,8 @@
     "loop": {
       "maxSteps": 8,
       "maxPerTool": 3,
-      "progressive": false
+      "progressive": false,
+      "intentSelector": "llm"
     },
     "memory": {
       "selectSemantic": 8,

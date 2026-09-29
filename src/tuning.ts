@@ -32,7 +32,7 @@ export interface Tuning {
   };
   deterministic: { intent: { embedThreshold: number; embedMargin: number } };
   auto: {
-    loop: { maxSteps: number; maxPerTool: number; progressive: boolean };
+    loop: { maxSteps: number; maxPerTool: number; progressive: boolean; intentSelector: 'llm' | 'jev' };
     memory: { selectSemantic: number; selectEpisodic: number; fallbackSemantic: number; fallbackEpisodic: number };
   };
 }
@@ -76,6 +76,22 @@ export const MAX_PER_TOOL = tuning.auto.loop.maxPerTool;
  * be reported as INVALID. Putting the flag in the config is what makes the arms distinguishable.
  */
 export const PROGRESSIVE = tuning.auto.loop.progressive;
+/**
+ * Who decides WHICH tool an auto-mode task needs.
+ *
+ *   llm   the model's own function calling — it picks the tool AND writes the arguments in one call
+ *   jev   an enumerated typed decision (TypeSafe's Choice) picks the tool; the arguments still have
+ *         to come from somewhere, because that model gives up string generation entirely
+ *
+ * It lives in the config rather than at a call site for the same reason progressive does: the
+ * objective's A/A guard keys on this file's hash, so two arms that differ only in a flag passed by
+ * the caller would hash identically and a real difference between them would be reported as
+ * INVALID. It is also why the eval must read it from here instead of hardcoding an arm.
+ *
+ * Currently 'llm'. Flipping it is not a one-line change — see eval/runners/evalJevIntent.ts for
+ * what has to be measured first, and note that the decision is only half of function calling.
+ */
+export const INTENT_SELECTOR = tuning.auto.loop.intentSelector;
 /**
  * How many memories may be INJECTED, capped per type. Two caps, not one, because the cap does a
  * completely different job on each of the two selection paths — measured 2026-09-28 on the 13-case

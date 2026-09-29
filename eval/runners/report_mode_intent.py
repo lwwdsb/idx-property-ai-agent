@@ -34,7 +34,23 @@ def main():
         tools = [t for t in p.get("auto_tools", []) if t]
         return set(tools) if tools else {"unknown"}
 
-    stats = {m: Counter() for m in ("det", "auto")}
+    # Jev arms, present only once evalJevIntent.ts has been run. Scored by the SAME rule as auto,
+    # including "empty set means out-of-domain", so the arms differ in the model being asked and
+    # nothing else — the whole point of adding a column to this file instead of writing a new
+    # report. `jev` is the single-select Choice; `jev_multi` is the per-tool belief thresholded
+    # into a set, which exists because gold.intents is a LIST and a single-select answer cannot
+    # express a compound request at all.
+    def jev_intents(p, field):
+        tools = [t for t in (p.get(field) or []) if t]
+        return set(tools) if tools else {"unknown"}
+
+    ARMS = ["det", "auto"]
+    if any("jev_tools" in p for p in preds):
+        ARMS.append("jev")
+    if any("jev_multi" in p for p in preds):
+        ARMS.append("jev_multi")
+
+    stats = {m: Counter() for m in ARMS}
     by_style = {}
     for p in preds:
         g = gold.get(p["id"])
@@ -42,9 +58,13 @@ def main():
             continue
         want = set(g["gold"].get("intents") or ["unknown"])
         got = {"det": {p.get("regex_intent") or "unknown"}, "auto": auto_intents(p)}
+        if "jev" in ARMS:
+            got["jev"] = jev_intents(p, "jev_tools")
+        if "jev_multi" in ARMS:
+            got["jev_multi"] = jev_intents(p, "jev_multi")
         style = g["style"]
-        by_style.setdefault(style, {m: Counter() for m in ("det", "auto")})
-        for m in ("det", "auto"):
+        by_style.setdefault(style, {m: Counter() for m in ARMS})
+        for m in ARMS:
             # primary: did we get the main intent right (gold's first / any overlap)
             hit = bool(got[m] & want)
             # strict: exactly the gold set (only meaningful for multi-intent rows)
@@ -64,14 +84,16 @@ def main():
             s += f"  域外拒识={c['ood_ok']}/{c['ood_n']}={c['ood_ok']/c['ood_n']:.2f}"
         return s
 
+    NAMES = {"det": "确定性", "auto": "auto(LLM fc)",
+             "jev": "auto(Jev 单选)", "jev_multi": "auto(Jev 多标签)"}
     print("=== 全集 ===")
-    for m, name in (("det", "确定性"), ("auto", "auto")):
-        print(line(name, stats[m]))
+    for m in ARMS:
+        print(line(NAMES[m], stats[m]))
     print("\n=== 分层 ===")
     for style in sorted(by_style):
         print(f"[{style}]")
-        for m, name in (("det", "确定性"), ("auto", "auto")):
-            print(line(name, by_style[style][m]))
+        for m in ARMS:
+            print(line(NAMES[m], by_style[style][m]))
 
 
 if __name__ == "__main__":

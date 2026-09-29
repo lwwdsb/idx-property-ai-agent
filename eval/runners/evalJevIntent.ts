@@ -71,8 +71,23 @@ const INTENT_CRITERIA: Record<string, string> = {
   recommend: 'Given a listing the user already likes or referred to, find similar homes.',
   knowledge: 'Explain a real-estate term, metric or concept (what does DOM mean, how are comps computed).',
   email: 'Draft an outbound email to a recipient, e.g. send a report to a client address.',
+  // compound 补回来【只为公平对比】:现状系统有一条规则能答它,给 Jev 更小的标签空间再比 macro-F1
+  // 就不是同一把尺子 —— 首轮实测 8 条错里 3 条是 compound,单这一类为 0 就在 7 类里拖掉约 0.14。
+  // 架构上我仍然认为它不该是一个类(它是"搜索+估价"这一个特定组合的伪类,三个意图就表达不了),
+  // 但那是该不该改 gold 的问题,不该用"换一把更小的尺子"来回避。
+  compound: 'BOTH a listing search AND a judgement about whether the price is fair — two things at once.',
   unknown: 'None of the above: small talk, another domain entirely, or something this '
     + 'real-estate assistant cannot do (mortgage math, buying a house for the user, jokes).',
+};
+
+/** 同一次请求里附带的两个是非题 —— 不额外增加往返,每个约 30 token。
+ *  multi 对标现任元数判定(关键词计数,precision 0.500 / recall 0.545,整个意图层最差的数);
+ *  ref 对标 REF_RE。两者都有现成 gold:gold.intents 是列表,指代类用例在域内集里。 */
+const EXTRA_NOULS = {
+  multi: { instructions: 'Does this request ask the assistant to do more than ONE distinct thing '
+    + '(e.g. find listings AND report market stats), as opposed to one request with several constraints?' },
+  ref: { instructions: 'Does this message refer back to a specific listing or result from earlier in '
+    + 'the conversation (e.g. "that one", "the first", "这套", "上次看的")?' },
 };
 
 const choiceSpec: ChoiceSpec = {
@@ -131,13 +146,14 @@ const rows: Array<Record<string, unknown>> = [];
 for (const c of selected) {
   try {
     const s = Date.now();
-    const r = await systemOne(c.input, { choices: { intent: choiceSpec } });
+    const r = await systemOne(c.input, { choices: { intent: choiceSpec }, nouls: EXTRA_NOULS });
     lat.push(Date.now() - s);
     inTok += r.usage.inputTokens;
     const a = r.choices.intent!;
     const ok = c.label.intents.includes(a.choice);
     rows.push({ id: c.id, input: c.input, gold: c.label.intents, pred: a.choice,
-      confidence: a.confidence, margin: a.margin, probabilities: a.probabilities, hit: ok });
+      confidence: a.confidence, margin: a.margin, probabilities: a.probabilities, hit: ok,
+      noul_multi: r.nouls.multi ?? null, noul_ref: r.nouls.ref ?? null });
     console.log(`  ${ok ? '✓' : '✗'} ${c.id}  ${a.choice.padEnd(10)} conf=${a.confidence.toFixed(3)} `
       + `margin=${a.margin.toFixed(3)}  gold=[${c.label.intents.join(',')}]`);
   } catch (e) {

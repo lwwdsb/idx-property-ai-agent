@@ -23,17 +23,21 @@
  * data. The full distribution is therefore kept and returned, so the project's existing
  * threshold-and-margin rule (top1 - top2) can be applied to it rather than trusting one number.
  */
+import { config } from '../config.js';   // 它负责加载 .env —— 不 import 就读不到 key
 import { withResilience, CircuitBreaker } from '../resilience/resilience.js';
 import { logger } from '../logger.js';
 
 const BASE = (process.env.JEV_BASE_URL || 'https://api.typesafe.ai/v1').replace(/\/$/, '');
 const MODEL = process.env.JEV_MODEL || 'jev-latest';
-const KEY = (process.env.TYPESAFE_API_KEY || '').trim();
+/** 惰性读取,不在模块加载时定格。模块加载时读会踩两个坑:一是 .env 还没被任何模块加载进来
+ *  (曾经就是这么"key 未设置"的),二是测试或脚本无法在运行时注入。 */
+const key = (): string => (process.env.TYPESAFE_API_KEY || '').trim();
+void config;   // 仅为触发 .env 加载
 
 /** Same breaker discipline as the LLM path: a dead dependency must fail fast, not queue up. */
 const jevBreaker = new CircuitBreaker(5, 15_000);
 
-export const jevAvailable = (): boolean => KEY.length > 0;
+export const jevAvailable = (): boolean => key().length > 0;
 
 export interface ChoiceAnswer {
   choice: string;
@@ -66,7 +70,8 @@ export async function systemOne(
   state: string | Record<string, unknown>,
   questions: { choices?: Record<string, ChoiceSpec>; nouls?: Record<string, NoulSpec> },
 ): Promise<SystemOneResult> {
-  if (!jevAvailable()) throw new Error('Jev not configured (set TYPESAFE_API_KEY)');
+  const apiKey = key();
+  if (!apiKey) throw new Error('Jev not configured (set TYPESAFE_API_KEY)');
   const body: Record<string, unknown> = { state, model: MODEL, questions: {} };
   const q = body.questions as Record<string, unknown>;
   for (const [id, c] of Object.entries(questions.choices ?? {})) {
@@ -79,7 +84,7 @@ export async function systemOne(
   return withResilience(async () => {
     const res = await fetch(`${BASE}/systemone`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${KEY}` },
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}` },
       body: JSON.stringify(body),
     });
     if (!res.ok) {

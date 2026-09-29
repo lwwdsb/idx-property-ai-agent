@@ -46,9 +46,24 @@ const TAG = arg('tag', CONFIG)!;
 const DRY = process.argv.includes('--dry');
 
 /**
- * 选项描述。刻意写成"这个意图在本系统里是什么",而不是照着测试集的用例反推 —— 后者会把测试集
- * 的表达方式泄漏进 prompt,量出来的就不是泛化能力。compound 和 unknown 也给成显式选项,因为
- * 它们都是 gold 里的类,而 embedding 那一层结构上答不出它们。
+ * 六个选项:五个技能 + 显式 unknown。
+ *
+ * 为什么没有 compound、也没有多标签。多意图在这个系统里【不是分类器的职责】:detectMultiIntent
+ * 先判是否 >=2 个意图,然后 planSkills 用【一次】LLM 调用同时给出技能列表和每个技能的子 query。
+ * 而拆子 query 是文本生成,Jev 结构上做不了 —— 所以把 Jev 插在多意图路径前面纯属多余:它给出
+ * 集合,但生成子 query 的那次调用顺带就把技能说了,等于多一次往返、零收益。
+ *
+ * 反过来,这也界定了 Jev 该待的地方:【输出是标签而不是 query 的那些决定】。残余集 34 条里 32 条
+ * 是域外探针,而域外的输出是一句拒答,永远不需要改写 —— 那正是现在这一层坏掉的地方
+ * (embedding 单独跑:域内误拒 46%)。
+ *
+ * gold 里有 3 条标成 ['compound'],它们表达的其实是"搜索 + 估价"这个组合,和另外 8 条标成
+ * {search, market} 的是同一类现象、两种编码 —— 因为标签跟着代码里那条 searchable && value 的
+ * 特殊规则走了。六选项的 Choice 结构上答不出 compound,所以这 3 条必然算错。这是【gold 的
+ * 不一致】而不是模型能力问题,报告里单独标出来,不擅自改标签。
+ *
+ * 描述刻意写成"这个意图在本系统里是什么",不照测试集用例反推 —— 否则会把测试集的表达方式泄漏
+ * 进 prompt,量出来的就不是泛化能力。
  */
 const INTENT_CRITERIA: Record<string, string> = {
   search: 'Find property listings matching criteria (city, bedrooms, budget, type, features).',
@@ -56,7 +71,6 @@ const INTENT_CRITERIA: Record<string, string> = {
   recommend: 'Given a listing the user already likes or referred to, find similar homes.',
   knowledge: 'Explain a real-estate term, metric or concept (what does DOM mean, how are comps computed).',
   email: 'Draft an outbound email to a recipient, e.g. send a report to a client address.',
-  compound: 'BOTH a listing search AND a judgement about whether the price is fair — two things at once.',
   unknown: 'None of the above: small talk, another domain entirely, or something this '
     + 'real-estate assistant cannot do (mortgage math, buying a house for the user, jokes).',
 };
@@ -93,6 +107,10 @@ if (DRY) {
   console.log(`选项(${Object.keys(INTENT_CRITERIA).length} 个,含显式 compound 与 unknown):`);
   for (const [k, v] of Object.entries(INTENT_CRITERIA)) console.log(`  ${k.padEnd(10)} ${v.slice(0, 76)}`);
   console.log(`\n用例:${selected.length} / ${cases.length} 条`);
+  const comp = selected.filter((c) => c.label.intents.includes('compound')).length;
+  const multi = selected.filter((c) => c.label.intents.length > 1).length;
+  if (comp) console.log(`  其中 ${comp} 条 gold 是 ['compound'] —— 六选项结构上答不出,必然算错(gold 不一致,见文件头)`);
+  if (multi) console.log(`  其中 ${multi} 条是多意图(gold 为集合)—— Choice 答对其中任一个即计命中,与现有 accuracy_in_set 同口径`);
   if (CONFIG !== 'all') {
     const g = selected.filter((c) => c.label.intents.includes('unknown')).length;
     console.log(`  其中域外 ${g} 条 / 域内 ${selected.length - g} 条`);

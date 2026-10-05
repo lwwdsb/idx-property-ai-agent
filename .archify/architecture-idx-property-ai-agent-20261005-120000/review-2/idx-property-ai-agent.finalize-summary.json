@@ -1,0 +1,123 @@
+{
+  "schemaVersion": 1,
+  "ok": false,
+  "command": "finalize",
+  "status": "fail",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/candidate.json",
+    "sha256": "f52096fb01d0b65733f74f1ffdb61e4f7426a113c032ff1b3f9b5b6321167718",
+    "bytes": 11925
+  },
+  "artifact": {
+    "path": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/idx-property-ai-agent.html",
+    "sha256": "4535ce73fd0acf142177e26078c66abcf860e29598d836a26121de2feb597b89",
+    "bytes": 786400
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "fail"
+  },
+  "failedStage": "browser-check",
+  "diagnostics": [
+    {
+      "code": "viewer/viewport-overflow",
+      "severity": "error",
+      "message": "The rendered artifact overflows the 2048x1320 light viewport.",
+      "subject": {
+        "artifact": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/idx-property-ai-agent.html",
+        "viewport": {
+          "width": 2048,
+          "height": 1320,
+          "theme": "light"
+        }
+      },
+      "evidence": {
+        "innerWidth": 2048,
+        "innerHeight": 1320,
+        "scrollWidth": 2048,
+        "scrollHeight": 1321,
+        "overflowX": false,
+        "overflowY": true,
+        "overflowDisposition": "unexpected-overflow",
+        "readerLayout": "adaptive",
+        "readerOverflow": null,
+        "readerFit": "intrinsic-height",
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 68,
+          "diagramChromePx": 94,
+          "svgPx": 1095,
+          "cardsPx": 0,
+          "viewBoxHeight": 1314
+        },
+        "pageCompositionMeasurement": "CSS pixels at this viewport; body padding, header, diagram chrome, SVG and cards stack vertically and sum to scrollHeight"
+      },
+      "supportedFixes": [
+        "the page is 1px too tall (64px body padding + 68px header + 94px diagram chrome + 1095px SVG + 0px cards = 1321px against 1320px); the Reader already narrowed the stage to its 950px minimum, so the SVG height only follows meta.viewBox: keep every node and relationship and reduce the viewBox height to at most 1312 (from 1314) by tightening vertical gaps and empty rows"
+      ]
+    },
+    {
+      "code": "viewer/viewport-overflow",
+      "severity": "error",
+      "message": "The rendered artifact overflows the 2048x1320 dark viewport.",
+      "subject": {
+        "artifact": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/idx-property-ai-agent.html",
+        "viewport": {
+          "width": 2048,
+          "height": 1320,
+          "theme": "dark"
+        }
+      },
+      "evidence": {
+        "innerWidth": 2048,
+        "innerHeight": 1320,
+        "scrollWidth": 2048,
+        "scrollHeight": 1321,
+        "overflowX": false,
+        "overflowY": true,
+        "overflowDisposition": "unexpected-overflow",
+        "readerLayout": "adaptive",
+        "readerOverflow": null,
+        "readerFit": "intrinsic-height",
+        "pageComposition": {
+          "bodyPaddingPx": 64,
+          "headerPx": 68,
+          "diagramChromePx": 94,
+          "svgPx": 1095,
+          "cardsPx": 0,
+          "viewBoxHeight": 1314
+        },
+        "pageCompositionMeasurement": "CSS pixels at this viewport; body padding, header, diagram chrome, SVG and cards stack vertically and sum to scrollHeight"
+      },
+      "supportedFixes": [
+        "the page is 1px too tall (64px body padding + 68px header + 94px diagram chrome + 1095px SVG + 0px cards = 1321px against 1320px); the Reader already narrowed the stage to its 950px minimum, so the SVG height only follows meta.viewBox: keep every node and relationship and reduce the viewBox height to at most 1312 (from 1314) by tightening vertical gaps and empty rows"
+      ]
+    }
+  ],
+  "diagnosticSummary": {
+    "total": 2,
+    "shown": 2,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/review-2/idx-property-ai-agent.finalize.json",
+    "summaryReceipt": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/review-2/idx-property-ai-agent.finalize-summary.json",
+    "browserCheckReceipt": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/review-2/idx-property-ai-agent.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-05T18:51:20.998Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 1910
+}

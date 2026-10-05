@@ -1,0 +1,551 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "IDX 房地产 AI 助手 · 系统架构",
+    "locale": "zh-CN",
+    "output": "idx-property-ai-agent.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/lwwdsb/idx-property-ai-agent.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "5fe7851ea6524970b17b27070a166bf4c699397f"
+    }
+  },
+  "components": [
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "LLM",
+      "sublabel": "生成类任务 · 工具调用",
+      "pos": [
+        320,
+        150
+      ],
+      "size": [
+        175,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/llm/client.ts",
+          "line": 181,
+          "end_line": 197,
+          "label": "chatWithTools"
+        }
+      ]
+    },
+    {
+      "id": "jev",
+      "type": "cloud",
+      "label": "Jev 类型化判断",
+      "sublabel": "只输出结构化选择与概率",
+      "pos": [
+        600,
+        150
+      ],
+      "size": [
+        185,
+        66
+      ],
+      "tag": "~110ms",
+      "sources": [
+        {
+          "path": "src/llm/jev.ts",
+          "line": 69,
+          "end_line": 85,
+          "label": "POST /v1/systemone"
+        }
+      ]
+    },
+    {
+      "id": "user",
+      "type": "external",
+      "label": "用户",
+      "sublabel": "WhatsApp",
+      "pos": [
+        40,
+        390
+      ],
+      "size": [
+        130,
+        62
+      ]
+    },
+    {
+      "id": "plugin",
+      "type": "frontend",
+      "label": "OpenClaw 插件",
+      "sublabel": "消息入口 · 本机绑定",
+      "pos": [
+        320,
+        390
+      ],
+      "size": [
+        160,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/whatsapp/openclaw.ts",
+          "line": 45,
+          "end_line": 51,
+          "label": "先试 auto,否则编排"
+        }
+      ]
+    },
+    {
+      "id": "intent",
+      "type": "backend",
+      "label": "意图判定",
+      "sublabel": "正则 ‖ Jev 一致性裁决",
+      "pos": [
+        600,
+        390
+      ],
+      "size": [
+        175,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/orchestrator/intent.ts",
+          "line": 232,
+          "end_line": 262,
+          "label": "一致/不一致/降级"
+        }
+      ]
+    },
+    {
+      "id": "orchestrate",
+      "type": "backend",
+      "label": "编排器",
+      "sublabel": "控制流由代码固定",
+      "pos": [
+        880,
+        390
+      ],
+      "size": [
+        175,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/orchestrator/orchestrate.ts",
+          "line": 58,
+          "end_line": 101,
+          "label": "判意图→计划→调技能"
+        }
+      ]
+    },
+    {
+      "id": "consolidation",
+      "type": "backend",
+      "label": "记忆整理子智能体",
+      "sublabel": "工具白名单与业务工具不相交",
+      "pos": [
+        40,
+        630
+      ],
+      "size": [
+        175,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/memory/consolidation.ts",
+          "line": 25,
+          "end_line": 30,
+          "label": "隔离的工具域"
+        }
+      ]
+    },
+    {
+      "id": "autoloop",
+      "type": "backend",
+      "label": "自主 Agent 循环",
+      "sublabel": "LLM 自选工具 · 多步",
+      "pos": [
+        320,
+        630
+      ],
+      "size": [
+        175,
+        62
+      ],
+      "sources": [
+        {
+          "path": "src/agent/auto/loop.ts",
+          "line": 154,
+          "end_line": 165,
+          "label": "ReAct 循环 + 反幻觉闸"
+        }
+      ]
+    },
+    {
+      "id": "skills",
+      "type": "backend",
+      "label": "技能注册表",
+      "sublabel": "搜房 行情 推荐 估价 问答 邮件",
+      "pos": [
+        880,
+        630
+      ],
+      "size": [
+        200,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/orchestrator/skills.ts",
+          "line": 142,
+          "end_line": 289,
+          "label": "六个已注册技能"
+        }
+      ]
+    },
+    {
+      "id": "memory",
+      "type": "database",
+      "label": "长期记忆",
+      "sublabel": "语义 + 情景 · 按写者拆文件",
+      "pos": [
+        40,
+        870
+      ],
+      "size": [
+        175,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/memory/profile.ts",
+          "line": 88,
+          "end_line": 89,
+          "label": "原子写,按写者分文件"
+        }
+      ]
+    },
+    {
+      "id": "approval",
+      "type": "security",
+      "label": "人工审批闸",
+      "sublabel": "挂起 → 确认 → 断点续跑",
+      "pos": [
+        600,
+        870
+      ],
+      "size": [
+        185,
+        62
+      ],
+      "tag": "绝不自动发送",
+      "sources": [
+        {
+          "path": "src/agent/auto/loop.ts",
+          "line": 217,
+          "end_line": 222,
+          "label": "起草即挂起存盘"
+        },
+        {
+          "path": "src/email/email.ts",
+          "line": 80,
+          "label": "已发送则幂等返回"
+        }
+      ]
+    },
+    {
+      "id": "retrieval",
+      "type": "backend",
+      "label": "检索服务",
+      "sublabel": "混合检索 + 交叉编码器精排",
+      "pos": [
+        880,
+        870
+      ],
+      "size": [
+        190,
+        62
+      ],
+      "tag": ":8099",
+      "sources": [
+        {
+          "path": "retrieval/service.py",
+          "line": 218,
+          "end_line": 240,
+          "label": "粗排 20 → 精排 top-k"
+        },
+        {
+          "path": "retrieval/service.py",
+          "line": 76,
+          "end_line": 78,
+          "label": "精排失败则降级"
+        }
+      ]
+    },
+    {
+      "id": "smtp",
+      "type": "external",
+      "label": "邮件出口",
+      "sublabel": "SMTP",
+      "pos": [
+        320,
+        1110
+      ],
+      "size": [
+        185,
+        62
+      ]
+    },
+    {
+      "id": "mysql",
+      "type": "database",
+      "label": "MySQL",
+      "sublabel": "房源成交 · 草稿 · 运行状态",
+      "pos": [
+        600,
+        1110
+      ],
+      "size": [
+        190,
+        66
+      ],
+      "sources": [
+        {
+          "path": "src/email/drafts.ts",
+          "line": 38,
+          "label": "email_drafts 表"
+        },
+        {
+          "path": "src/agent/auto/runStore.ts",
+          "line": 80,
+          "label": "agent_runs 表"
+        },
+        {
+          "path": "retrieval/service.py",
+          "line": 122,
+          "end_line": 123,
+          "label": "按 id 取描述"
+        }
+      ]
+    },
+    {
+      "id": "qdrant",
+      "type": "database",
+      "label": "Qdrant",
+      "sublabel": "一个集合 · dense + BM25",
+      "pos": [
+        880,
+        1110
+      ],
+      "size": [
+        205,
+        66
+      ],
+      "tag": "RRF 融合",
+      "sources": [
+        {
+          "path": "retrieval/search.py",
+          "line": 43,
+          "end_line": 47,
+          "label": "两路预取 + RRF"
+        },
+        {
+          "path": "retrieval/common.py",
+          "line": 118,
+          "end_line": 122,
+          "label": "一个点带两个向量"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Python 检索运行时",
+      "wraps": [
+        "retrieval"
+      ]
+    },
+    {
+      "kind": "security-group",
+      "label": "工具域隔离",
+      "wraps": [
+        "consolidation"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "user-to-plugin",
+      "from": "user",
+      "to": "plugin",
+      "label": "消息",
+      "variant": "emphasis"
+    },
+    {
+      "id": "plugin-to-intent",
+      "from": "plugin",
+      "to": "intent",
+      "label": "编排模式",
+      "variant": "emphasis"
+    },
+    {
+      "id": "plugin-to-auto",
+      "from": "plugin",
+      "to": "autoloop",
+      "label": "auto 模式"
+    },
+    {
+      "id": "intent-asks-jev",
+      "from": "intent",
+      "to": "jev",
+      "label": "判意图 + 元数",
+      "variant": "security"
+    },
+    {
+      "id": "intent-to-orchestrate",
+      "from": "intent",
+      "to": "orchestrate",
+      "label": "路由决策",
+      "variant": "emphasis"
+    },
+    {
+      "id": "orchestrate-uses-llm",
+      "from": "orchestrate",
+      "to": "llm",
+      "label": "拆子查询",
+      "variant": "dashed"
+    },
+    {
+      "id": "orchestrate-to-skills",
+      "from": "orchestrate",
+      "to": "skills",
+      "label": "调用技能",
+      "variant": "emphasis"
+    },
+    {
+      "id": "auto-uses-llm",
+      "from": "autoloop",
+      "to": "llm",
+      "label": "工具调用",
+      "variant": "dashed"
+    },
+    {
+      "id": "auto-to-skills",
+      "from": "autoloop",
+      "to": "skills",
+      "label": "共享技能"
+    },
+    {
+      "id": "memory-seeds-auto",
+      "from": "memory",
+      "to": "autoloop",
+      "label": "注入偏好",
+      "variant": "dashed"
+    },
+    {
+      "id": "consolidate-writes",
+      "from": "consolidation",
+      "to": "memory",
+      "label": "沉淀偏好"
+    },
+    {
+      "id": "skills-to-retrieval",
+      "from": "skills",
+      "to": "retrieval",
+      "label": "HTTP",
+      "variant": "emphasis"
+    },
+    {
+      "id": "skills-drafts-mail",
+      "from": "skills",
+      "to": "approval",
+      "label": "邮件起草",
+      "variant": "security"
+    },
+    {
+      "id": "approval-sends",
+      "from": "approval",
+      "to": "smtp",
+      "label": "确认后发送",
+      "variant": "security"
+    },
+    {
+      "id": "approval-persists",
+      "from": "approval",
+      "to": "mysql",
+      "label": "状态落库"
+    },
+    {
+      "id": "retrieval-to-qdrant",
+      "from": "retrieval",
+      "to": "qdrant",
+      "label": "混合检索",
+      "variant": "emphasis"
+    },
+    {
+      "id": "retrieval-reads-mysql",
+      "from": "retrieval",
+      "to": "mysql",
+      "label": "取描述"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "判断 / 查表 / 生成 三分工",
+      "items": [
+        "语义判断交给 Jev:只输出结构化选择与概率,不生成文本",
+        "槽位抽取走正则,查表与模式匹配(槽位 F1 0.97)",
+        "拆子查询、翻译、补漏解析等生成类任务才调 LLM"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "两条路径的区别:控制流归谁",
+      "items": [
+        "编排模式:控制流写死在代码里,单任务直接调技能",
+        "多任务由受约束规划拆成子查询,再按计划执行",
+        "自主模式:LLM 在循环中自选工具,边界由代码守住"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "正则没有被替换",
+      "items": [
+        "正则与 Jev 并行跑,一致直接执行",
+        "不一致时按置信度决断,Jev 不可用则降级回正则",
+        "意图 macro-F1 0.80 → 0.95,域外拒答 0.80 → 0.94"
+      ]
+    },
+    {
+      "dot": "rose",
+      "title": "绝不误发 > 绝不编造 > 优雅降级",
+      "items": [
+        "发送能力锁在工具层,模型自己碰不到",
+        "起草即挂起存盘,人工确认后断点续跑",
+        "判断层、精排、检索各有降级路径,不中断主流程"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "检索:一个集合两路向量",
+      "items": [
+        "dense 与 BM25 同属一个 point,结构上不会不同步",
+        "服务端 RRF 融合,再经交叉编码器精排",
+        "nDCG@10 0.78 → 0.94,硬过滤走 payload 索引"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "两个运行时",
+      "items": [
+        "Node/TypeScript:入口、判定、编排、技能、审批闸",
+        "Python :8099:常驻检索服务,精排模型预热一次",
+        "长期记忆是本地文件,MySQL 与 Qdrant 是独立服务"
+      ]
+    }
+  ]
+}

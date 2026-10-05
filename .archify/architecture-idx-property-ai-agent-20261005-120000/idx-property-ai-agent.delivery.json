@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "bca9c57f-4ee5-4ca0-9e11-bd7dfe6910ab",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/candidate.json",
+  "output": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/idx-property-ai-agent.html",
+  "specification": {
+    "sha256": "8a762eea0dd5f32e8a9863adc483a64bdbf16b292e4fd18a0d5b9e215cbffed7",
+    "bytes": 19069
+  },
+  "artifact": {
+    "sha256": "0dfc23c92502ac258eb48b13d3066750c90400c1f9ac9c285b330078320c58fc",
+    "bytes": 812755
+  }
+}

@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "finalize",
+  "status": "pass",
+  "type": "architecture",
+  "quality": "showcase",
+  "specification": {
+    "path": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/candidate.json",
+    "sha256": "26961e84d9627e0d6a7ac6e34e1fa25965ffe281d3ecd911745599006d9c588a",
+    "bytes": 16206
+  },
+  "artifact": {
+    "path": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/idx-property-ai-agent.html",
+    "sha256": "f0b01fdb36df6a042b2f37acc7df396df258dec8c377c193b264b06be267a630",
+    "bytes": 802725
+  },
+  "gates": {
+    "validate": "pass",
+    "deliver": "pass",
+    "check": "pass",
+    "browser-check": "pass"
+  },
+  "diagnostics": [],
+  "diagnosticSummary": {
+    "total": 0,
+    "shown": 0,
+    "truncated": false
+  },
+  "evidence": {
+    "receipt": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/review-9/idx-property-ai-agent.finalize.json",
+    "summaryReceipt": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/review-9/idx-property-ai-agent.finalize-summary.json",
+    "browserCheckReceipt": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-property-ai-agent-20261005-120000/review-9/idx-property-ai-agent.browser-check.json"
+  },
+  "update": {
+    "status": "current",
+    "installedVersion": "3.0.1",
+    "availableVersion": "3.0.1",
+    "releaseNotes": null,
+    "checkedAt": "2026-10-05T18:51:20.998Z",
+    "source": "cache",
+    "noticeRequired": false,
+    "noticeText": null
+  },
+  "visualReview": "not-requested",
+  "durationMs": 2255,
+  "visualReviewRecommendation": {
+    "action": "inspect-route-readability",
+    "signals": {
+      "resolvedCrossovers": 5,
+      "routesOverSuggestedBends": 4
+    },
+    "reason": "Automated gates passed, but crossings or detours still need perceptual review before claiming visual quality.",
+    "affectedRoutes": {
+      "crossings": [
+        {
+          "left": {
+            "id": "user-to-plugin",
+            "from": "user",
+            "to": "plugin",
+            "label": "消息",
+            "collectionIndex": 0,
+            "artifactIndex": 1
+          },
+          "right": {
+            "id": "auto-uses-llm",
+            "from": "autoloop",
+            "to": "llm",
+            "label": "工具调用",
+            "collectionIndex": 7,
+            "artifactIndex": 8
+          },
+          "point": [
+            296,
+            421
+          ]
+        },
+        {
+          "left": {
+            "id": "intent-asks-jev",
+            "from": "intent",
+            "to": "jev",
+            "label": "判意图 + 元数",
+            "collectionIndex": 3,
+            "artifactIndex": 4
+          },
+          "right": {
+            "id": "orchestrate-uses-llm",
+            "from": "orchestrate",
+            "to": "llm",
+            "label": "拆子查询",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "point": [
+            687.5,
+            291
+          ]
+        },
+        {
+          "left": {
+            "id": "consolidate-episodic",
+            "from": "consolidation",
+            "to": "mem-episodic",
+            "label": "写情景",
+            "collectionIndex": 18,
+            "artifactIndex": 19
+          },
+          "right": {
+            "id": "semantic-seeds-auto",
+            "from": "mem-semantic",
+            "to": "autoloop",
+            "label": "注入偏好",
+            "collectionIndex": 19,
+            "artifactIndex": 20
+          },
+          "point": [
+            215,
+            846
+          ]
+        },
+        {
+          "left": {
+            "id": "semantic-seeds-auto",
+            "from": "mem-semantic",
+            "to": "autoloop",
+            "label": "注入偏好",
+            "collectionIndex": 19,
+            "artifactIndex": 20
+          },
+          "right": {
+            "id": "auto-writes-usage",
+            "from": "autoloop",
+            "to": "usage",
+            "label": "写使用计数",
+            "collectionIndex": 20,
+            "artifactIndex": 21
+          },
+          "point": [
+            292,
+            845.2727272727273
+          ],
+          "sharedNode": "autoloop"
+        },
+        {
+          "left": {
+            "id": "auto-writes-usage",
+            "from": "autoloop",
+            "to": "usage",
+            "label": "写使用计数",
+            "collectionIndex": 20,
+            "artifactIndex": 21
+          },
+          "right": {
+            "id": "semantic-to-md",
+            "from": "mem-semantic",
+            "to": "profile-md",
+            "label": "",
+            "collectionIndex": 21,
+            "artifactIndex": 22
+          },
+          "point": [
+            250,
+            1086
+          ]
+        }
+      ],
+      "detours": [
+        {
+          "relationship": {
+            "id": "orchestrate-uses-llm",
+            "from": "orchestrate",
+            "to": "llm",
+            "label": "拆子查询",
+            "collectionIndex": 5,
+            "artifactIndex": 6
+          },
+          "bends": 4,
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "id": "skills-drafts-mail",
+            "from": "skills",
+            "to": "approval",
+            "label": "邮件起草",
+            "collectionIndex": 10,
+            "artifactIndex": 11
+          },
+          "bends": 3,
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "id": "semantic-seeds-auto",
+            "from": "mem-semantic",
+            "to": "autoloop",
+            "label": "注入偏好",
+            "collectionIndex": 19,
+            "artifactIndex": 20
+          },
+          "bends": 3,
+          "stretch": 1
+        },
+        {
+          "relationship": {
+            "id": "auto-writes-usage",
+            "from": "autoloop",
+            "to": "usage",
+            "label": "写使用计数",
+            "collectionIndex": 20,
+            "artifactIndex": 21
+          },
+          "bends": 3,
+          "stretch": 1
+        }
+      ],
+      "truncated": false
+    },
+    "hints": [
+      "user → plugin crosses autoloop → llm: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "intent → jev crosses orchestrate → llm: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "consolidation → mem-episodic crosses mem-semantic → autoloop: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "mem-semantic → autoloop and autoloop → usage cross next to autoloop: move node mem-semantic or usage so the two reach autoloop from different sides (for example one level with it, one directly above or below it).",
+      "autoloop → usage crosses mem-semantic → profile-md: move the node of whichever is a branch, return, or second entrance to the other side of the main path, so that relationship runs through an empty corridor.",
+      "orchestrate → llm needs 4 bends: move node orchestrate or llm so they share a row or column with matching centers, or sit diagonally with a clear corner.",
+      "skills → approval needs 3 bends: move node skills or approval so they share a row or column with matching centers, or sit diagonally with a clear corner.",
+      "mem-semantic → autoloop needs 3 bends: move node mem-semantic or autoloop so they share a row or column with matching centers, or sit diagonally with a clear corner."
+    ],
+    "repair": "Trace these relationships at the desktop viewport. For Architecture, use references/architecture-layout-repair.md: reflow a blocked main path or tangled connected scene, and repair an isolated defect locally only when the surrounding composition is accepted. Preserve all semantic content and user-fixed geometry. Rerun finalize once after the edit."
+  }
+}

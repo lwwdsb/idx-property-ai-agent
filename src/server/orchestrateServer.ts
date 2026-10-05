@@ -1,7 +1,7 @@
 /**
  * Orchestrator HTTP server (inbound wiring, Week 12+).
  *
- * Exposes our deterministic orchestrator over HTTP so the OpenClaw agent (acting as
+ * Exposes BOTH modes over HTTP so the OpenClaw agent (acting as
  * a thin front door) can forward each inbound message here via a registered tool.
  * The real work stays in our system; OpenClaw just relays.
  *
@@ -16,8 +16,20 @@
 import 'dotenv/config';
 import { createServer } from 'node:http';
 import { orchestrate } from '../orchestrator/orchestrate.js';
+import { handleAgentMessage } from '../agent/auto/entry.js';
+import { buildRegistry } from '../orchestrator/skills.js';
+import { pythonBridge } from '../orchestrator/bridge.js';
+import { MySqlDraftStore } from '../email/drafts.js';
+import { MySqlAgentRunStore } from '../agent/auto/runStore.js';
+import { getLLMClient } from '../llm/client.js';
 import { RateLimiter } from '../whatsapp/handler.js';
 import { logger } from '../logger.js';
+
+// 与插件相同的持久化单例 —— agent run 与其草稿要跨消息、跨重启存活(异步 HITL 挂起/恢复)。
+const draftStore = new MySqlDraftStore();
+const runStore = new MySqlAgentRunStore();
+const llm = getLLMClient();
+const registry = buildRegistry(pythonBridge, draftStore);
 
 const PORT = Number(process.env.ORCH_PORT ?? 8100);
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
@@ -100,7 +112,18 @@ const server = createServer(async (req, res) => {
         return;
       }
 
-      const result = await orchestrate(userId, String(message));
+      // 边界闸是【入口】审批,与下游走哪种模式无关 —— 所以这里必须和插件同序:
+      // 先试 auto(`/auto <任务>`、以及对挂起 run 的 `approve/cancel #N` 恢复),
+      // 返回 null 才落到确定性编排。此前这里只调 orchestrate,导致 MCP 这条接入路径
+      // 既进不了 auto,也恢复不了已挂起的 run —— 护栏一样,能力却不一样。
+      const agentReply = await handleAgentMessage(userId, String(message),
+        { registry, llm, draftStore, runStore });
+      // 不伪造 intent:'auto' —— Intent 是确定性路由的目标枚举,auto 不是其中之一。
+      // 用显式 mode 字段,两种模式的响应形状一致(都有 mode + reply)。
+      const result = agentReply !== null
+        ? { mode: 'auto' as const, reply: agentReply }
+        : { mode: 'deterministic' as const,
+            ...(await orchestrate(userId, String(message), { registry, draftStore, llm })) };
       cacheReply(key, result.reply);
       res.writeHead(200, JSON_HEADERS);
       res.end(JSON.stringify(result));

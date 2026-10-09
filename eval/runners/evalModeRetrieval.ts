@@ -23,6 +23,7 @@ import { classifyIntent } from '../../src/orchestrator/intent.js';
 import { isKnownCity } from '../../src/search/cityDictionary.js';
 import { getLLMClient, sanitizeFilter } from '../../src/llm/client.js';
 import { buildRegistry, extractSemanticText } from '../../src/orchestrator/skills.js';
+import { translateSemantic, hasCJK } from '../../src/search/multiQuery.js';
 import { pythonBridge } from '../../src/orchestrator/bridge.js';
 import { toolSpecs } from '../../src/agent/auto/tools.js';
 import { InMemoryDraftStore } from '../../src/email/drafts.js';
@@ -78,7 +79,13 @@ async function main() {
     }
 
     // what production would actually send to /search on each path (skills.ts:139-141)
-    const regexSemantic = extractSemanticText(c.input, regex);
+    // 送检文本必须和生产走同一条路。生产在抽取【之后】还有一步翻译(skills.ts 的 search 技能):
+    // 语料是英文的,中文残余原样送进去两侧都对不上。这个 runner 以前只调 extractSemanticText,
+    // 于是从翻译上线那天起,它量的就是一条生产里不存在的路径 —— 确定性通道的召回被低估,而
+    // 低估的部分恰好全是中文。两种模式都套用同一步,因为生产对两者用的是同一行代码。
+    const rawRegexSem = extractSemanticText(c.input, regex);
+    const regexSemantic = hasCJK(rawRegexSem) ? await translateSemantic(rawRegexSem, llm) : rawRegexSem;
+    autoSemantic = hasCJK(autoSemantic) ? await translateSemantic(autoSemantic, llm) : autoSemantic;
     preds.push({ id: c.id, regex_filter: regex, regex_intent: regexIntent, regex_semantic: regexSemantic,
                  auto_filter: autoFilter, auto_semantic: autoSemantic, auto_tools: toolsCalled });
     console.log(`  ${c.id} [${c.style}/${c.lang}] intent=${regexIntent} tools=${toolsCalled.join(',')||'-'}`);

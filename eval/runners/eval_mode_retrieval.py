@@ -16,6 +16,8 @@ from collections import defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "retrieval"))
 from search import hybrid_search, build_filter  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from stats import binom_two_sided  # noqa: E402  共用那一份精确检验
 
 DATA = os.path.join(ROOT, "eval", "datasets", "mode_retrieval.jsonl")
 PREDS = os.path.join(ROOT, "eval", "history", "mode_retrieval.preds.jsonl")
@@ -132,8 +134,30 @@ def main():
         print(f"  {cid} gold={sorted(gi)} auto_tools={sorted(at)}{mark}")
     print(f"intent/tool recall (all required tools called / no tool on OOD): {ok}/{total}")
 
-    json.dump({"note": "known-item recall + param F1, det(regex) vs auto(LLM)"}, open(OUT, "w"))
-    print(f"\nmetrics stub -> {OUT}")
+    # 真正落盘,而不是一个 stub。以前这里只写一句 note,于是两种模式的对照【跑完就丢】:
+    # 唯一的记录是终端里的表格,谁也没法事后比。本会话因此在图上放了一个两天前的旧数字 ——
+    # 那次比较恰好跨过了中文翻译上线,而没有任何落盘的结果能说出"这个数已经过期了"。
+    # diverge 是逐例配对,所以这里直接记下不一致对,McNemar 的输入就有了。
+    auto_wins = sum(1 for _, _, rgx, at in diverge if at > rgx)
+    regex_wins = len(diverge) - auto_wins
+    metrics = {
+        "n_cases": len(gold),
+        "param_f1": {m: dict(zip(("precision", "recall", "f1"), f1(*agg[m]["ALL"][:3])),
+                             over=agg[m]["ALL"][3]) for m in modes},
+        "known_item": {m: {"recall@5": rec[m]["ALL"][0] / rec[m]["ALL"][3],
+                           "recall@10": rec[m]["ALL"][1] / rec[m]["ALL"][3],
+                           "recall@20": rec[m]["ALL"][2] / rec[m]["ALL"][3],
+                           "n": rec[m]["ALL"][3]} for m in modes},
+        "paired_at10": {"discordant": len(diverge), "auto_wins": auto_wins,
+                        "regex_wins": regex_wins,
+                        "p_mcnemar": binom_two_sided(min(auto_wins, regex_wins), len(diverge))
+                                     if diverge else 1.0,
+                        "cases": [{"id": cid, "style": st, "regex": rgx, "auto": at}
+                                  for cid, st, rgx, at in diverge]},
+        "auto_tool_recall": {"ok": ok, "n": total},
+    }
+    json.dump(metrics, open(OUT, "w"), ensure_ascii=False, indent=1)
+    print(f"\nmetrics -> {OUT}")
 
 
 if __name__ == "__main__":

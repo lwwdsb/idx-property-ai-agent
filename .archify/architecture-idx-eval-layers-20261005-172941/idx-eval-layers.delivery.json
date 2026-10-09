@@ -1,0 +1,17 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "1af0c72a-d54b-4dd9-aa2a-ddcbf9948eda",
+  "status": "current",
+  "command": "deliver",
+  "type": "architecture",
+  "input": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-eval-layers-20261005-172941/candidate.json",
+  "output": "/Users/lww/Desktop/idx-property-ai-agent/.archify/architecture-idx-eval-layers-20261005-172941/idx-eval-layers.html",
+  "specification": {
+    "sha256": "ccf44cc7d7dce8019aa297c0b828bcd37fc9c80789978bcc324c7ad0df738473",
+    "bytes": 23326
+  },
+  "artifact": {
+    "sha256": "ab90043ad1aea85319f369d2e52db3ded21e28a903c15d647739fc9bde9c847c",
+    "bytes": 813638
+  }
+}

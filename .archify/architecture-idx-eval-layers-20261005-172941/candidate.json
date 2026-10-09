@@ -1,0 +1,1011 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "IDX 各能力层怎么测",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-idx-eval-layers-20261005-172941/idx-eval-layers.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/lwwdsb/idx-property-ai-agent.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "5204ee9de46d0a7338472b89484fa88630da1dd5"
+    },
+    "legend": {
+      "mode": "auto",
+      "entries": {
+        "database": {
+          "label": "评测集"
+        },
+        "backend": {
+          "label": "怎么测 / 怎么判"
+        },
+        "frontend": {
+          "label": "指标 / 结论"
+        },
+        "security": {
+          "label": "否决闸 / 硬不变量"
+        }
+      }
+    }
+  },
+  "components": [
+    {
+      "id": "d1",
+      "type": "database",
+      "label": "意图路由",
+      "sublabel": "intent.jsonl · 118 条(其中 35 条域外)",
+      "pos": [
+        40,
+        40
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/intent.jsonl",
+          "line": 1,
+          "label": "118 条人工标注的意图 gold"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 17,
+          "label": "冻结 v2 · 声明版本 + sha",
+          "end_line": 22
+        }
+      ]
+    },
+    {
+      "id": "m1",
+      "type": "backend",
+      "label": "真 classifyIntent",
+      "sublabel": "gold=意图标签 · 规则 ‖ Jev 一致即执行,不一致看置信",
+      "pos": [
+        360,
+        40
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalIntentParse.ts",
+          "line": 1,
+          "label": "跑真实分类,只写预测",
+          "end_line": 17
+        },
+        {
+          "path": "src/orchestrator/intent.ts",
+          "line": 1,
+          "label": "一致性仲裁的生产实现",
+          "end_line": 30
+        }
+      ]
+    },
+    {
+      "id": "r1",
+      "type": "frontend",
+      "label": "分类准确率 / 拒答率",
+      "sublabel": "准确率 0.975 · macro-F1 0.957 · 域外拒答 0.943",
+      "pos": [
+        730,
+        40
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/baseline.json",
+          "line": 1,
+          "label": "已接受基线里的三个值"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 69,
+          "end_line": 71,
+          "label": "这三条都在门禁里"
+        }
+      ]
+    },
+    {
+      "id": "d2",
+      "type": "database",
+      "label": "槽位解析",
+      "sublabel": "parse.jsonl · 40 条(28 条不需升级)",
+      "pos": [
+        40,
+        148
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/parse.jsonl",
+          "line": 1,
+          "label": "槽位 gold + 该不该升级"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 62,
+          "label": "冻结 v1",
+          "end_line": 67
+        }
+      ]
+    },
+    {
+      "id": "m2",
+      "type": "backend",
+      "label": "真 parseQuery",
+      "sublabel": "gold=槽位值 + 该不该升级到 LLM",
+      "pos": [
+        360,
+        148
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalIntentParse.ts",
+          "line": 10,
+          "label": "两个确定性测量,可复现",
+          "end_line": 14
+        }
+      ]
+    },
+    {
+      "id": "r2",
+      "type": "frontend",
+      "label": "升级决策 / 槽位 F1",
+      "sublabel": "升级准确率 0.925 · 槽位 F1 0.970(28 条)",
+      "pos": [
+        730,
+        148
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/baseline.json",
+          "line": 1,
+          "label": "已接受基线"
+        },
+        {
+          "path": "eval/metrics/parsing.py",
+          "line": 24,
+          "label": "槽位 F1 的唯一实现"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 72,
+          "end_line": 73,
+          "label": "升级与槽位 F1 都在门禁里"
+        }
+      ]
+    },
+    {
+      "id": "d3",
+      "type": "database",
+      "label": "检索排序",
+      "sublabel": "retrieval 24 条分级 + large 70 条池化",
+      "pos": [
+        40,
+        256
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/retrieval.jsonl",
+          "line": 1,
+          "label": "0/1/2 三档相关性分级"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 74,
+          "label": "两个集都冻结",
+          "end_line": 85
+        }
+      ]
+    },
+    {
+      "id": "m3",
+      "type": "backend",
+      "label": "三路 + 交叉编码器精排",
+      "sublabel": "gold=0/1/2 分级 · dense / BM25 / hybrid 同集对照,再比精排开关",
+      "pos": [
+        360,
+        256
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/eval_retrieval.py",
+          "line": 1,
+          "label": "三路对照 + 分级 nDCG",
+          "end_line": 8
+        },
+        {
+          "path": "eval/runners/eval_rerank_graded.py",
+          "line": 1,
+          "label": "只有 nDCG 能判排序好坏",
+          "end_line": 10
+        }
+      ]
+    },
+    {
+      "id": "r3",
+      "type": "frontend",
+      "label": "nDCG@10",
+      "sublabel": "hybrid 0.778 → 开精排 0.936 · 配对 22 胜 1 平 1 负",
+      "pos": [
+        730,
+        256
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/metrics/ir.py",
+          "line": 47,
+          "label": "nDCG 的唯一实现",
+          "end_line": 53
+        },
+        {
+          "path": "eval/runners/eval_rerank_service.py",
+          "line": 1,
+          "label": "走生产 /search 而非库调用",
+          "end_line": 10
+        }
+      ]
+    },
+    {
+      "id": "d4",
+      "type": "database",
+      "label": "RAG 问答",
+      "sublabel": "rag.jsonl · 30 条(20 集内 + 10 集外)",
+      "pos": [
+        40,
+        364
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/rag.jsonl",
+          "line": 1,
+          "label": "集内问题带来源段,集外问题无答案"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 68,
+          "label": "冻结 v1",
+          "end_line": 73
+        }
+      ]
+    },
+    {
+      "id": "m4",
+      "type": "backend",
+      "label": "集内 / 集外对照",
+      "sublabel": "集内看命中,集外看相似度是否更低 —— 把该不该加硬阈值变成一个数",
+      "pos": [
+        360,
+        364
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/eval_rag.py",
+          "line": 1,
+          "label": "命中率 + 分离度 + 拒答准确率",
+          "end_line": 11
+        }
+      ]
+    },
+    {
+      "id": "r4",
+      "type": "frontend",
+      "label": "hit@3 / 拒答准确率",
+      "sublabel": "hit@3 0.80 · 拒答准确率 0.867 · 分离度 0.146",
+      "pos": [
+        730,
+        364
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/metrics/ir.py",
+          "line": 55,
+          "label": "hit@k 的唯一实现",
+          "end_line": 59
+        }
+      ]
+    },
+    {
+      "id": "d5",
+      "type": "database",
+      "label": "长期记忆",
+      "sublabel": "挑哪几条 13 / 改口认不认 15 / 有没有用 7 / 整理对不对 5",
+      "pos": [
+        40,
+        472
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/memory_select.jsonl",
+          "line": 1,
+          "label": "该注入哪几条的人工 gold"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 23,
+          "label": "四个集全部冻结",
+          "end_line": 48
+        }
+      ]
+    },
+    {
+      "id": "m5",
+      "type": "backend",
+      "label": "四件事分开测",
+      "sublabel": "该注入哪几条 / 改口认不认 / 有没有真改变回答 / 子 agent 整理得对不对",
+      "pos": [
+        360,
+        472
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "Makefile",
+          "line": 63,
+          "end_line": 67,
+          "label": "四个记忆 runner"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 100,
+          "end_line": 103,
+          "label": "负对照与幂等是硬不变量"
+        }
+      ]
+    },
+    {
+      "id": "r5",
+      "type": "frontend",
+      "label": "注入精确 / 召回",
+      "sublabel": "精确 1.000 / 召回 0.697 · 动态·效用·固化 pass 1.0",
+      "pos": [
+        730,
+        472
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/baseline.json",
+          "line": 1,
+          "label": "已接受基线"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 79,
+          "end_line": 80,
+          "label": "召回容差用实测带 0.21"
+        }
+      ]
+    },
+    {
+      "id": "d6",
+      "type": "database",
+      "label": "确定性端到端",
+      "sublabel": "e2e.jsonl · 25 条",
+      "pos": [
+        40,
+        580
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/e2e.jsonl",
+          "line": 1,
+          "label": "意图 + 技能 + 回复内容 + 不得出现的字样"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 11,
+          "label": "冻结 v2",
+          "end_line": 16
+        }
+      ]
+    },
+    {
+      "id": "m6",
+      "type": "backend",
+      "label": "真 orchestrate",
+      "sublabel": "跑真编排器 · 假发信器永不投递 + 内存草稿库不碰真库",
+      "pos": [
+        360,
+        580
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalE2E.ts",
+          "line": 1,
+          "label": "真实链路,安全替身",
+          "end_line": 18
+        }
+      ]
+    },
+    {
+      "id": "r6",
+      "type": "security",
+      "label": "端到端通过率",
+      "sublabel": "通过率 0.96(24/25) ·【硬】emails_sent = 0",
+      "pos": [
+        730,
+        580
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/baseline.json",
+          "line": 1,
+          "label": "已接受基线"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 88,
+          "label": "未批准即投递是硬违规",
+          "end_line": 89
+        }
+      ]
+    },
+    {
+      "id": "d7",
+      "type": "database",
+      "label": "auto 自主模式",
+      "sublabel": "agent.jsonl · 21 条",
+      "pos": [
+        40,
+        688
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/agent.jsonl",
+          "line": 1,
+          "label": "工具组合 / 该不该挂起 / HITL 走向"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 4,
+          "label": "冻结 v2 · 14→21 时升过版本",
+          "end_line": 10
+        }
+      ]
+    },
+    {
+      "id": "m7",
+      "type": "backend",
+      "label": "真 runAgent + HITL",
+      "sublabel": "跑真自主循环 · 挂起→批准/取消→恢复全链 + 回复里的 MLS# 必须有出处",
+      "pos": [
+        360,
+        688
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalAgent.ts",
+          "line": 1,
+          "label": "真循环 + 安全与接地断言",
+          "end_line": 14
+        }
+      ]
+    },
+    {
+      "id": "r7",
+      "type": "security",
+      "label": "自主通过率",
+      "sublabel": "通过率 1.0 ·【硬】self_sent = 0 · 接地 7/7 · 均 2.3 步",
+      "pos": [
+        730,
+        688
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/baseline.json",
+          "line": 1,
+          "label": "已接受基线"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 93,
+          "end_line": 94,
+          "label": "绝不自行发信 + HITL 正对照"
+        }
+      ]
+    },
+    {
+      "id": "d8",
+      "type": "database",
+      "label": "双模同集对照",
+      "sublabel": "人工 44 条(冻结) + 机器生成 171 条(会重建)",
+      "pos": [
+        40,
+        796
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/mode_retrieval.jsonl",
+          "line": 1,
+          "label": "人工 44 条,gold filter + 目标房源"
+        },
+        {
+          "path": "eval/runners/gen_knownitem_set.py",
+          "line": 1,
+          "end_line": 24,
+          "label": "机器生成的四条防作弊规则"
+        },
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 49,
+          "end_line": 61,
+          "label": "人工集冻结,生成集 frozen=false"
+        }
+      ]
+    },
+    {
+      "id": "m8",
+      "type": "backend",
+      "label": "两侧同集提取",
+      "sublabel": "确定性走 regex,auto 走 LLM 工具参数;各自真实提取,再用同一把尺子打分",
+      "pos": [
+        360,
+        796
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalModeRetrieval.ts",
+          "line": 1,
+          "label": "TS 做真实提取,Python 做检索与打分",
+          "end_line": 19
+        }
+      ]
+    },
+    {
+      "id": "r8",
+      "type": "frontend",
+      "label": "known-item 召回 / 参数 F1",
+      "sublabel": "确定性 0.69 / auto 0.77 · 参数 F1 0.87 / 0.97",
+      "pos": [
+        730,
+        796
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/eval_mode_retrieval.py",
+          "line": 88,
+          "end_line": 112,
+          "label": "同集逐例配对的召回与分歧"
+        },
+        {
+          "path": "eval/runners/stats.py",
+          "line": 1,
+          "end_line": 15,
+          "label": "McNemar 精确检验"
+        }
+      ]
+    },
+    {
+      "id": "p_main",
+      "type": "database",
+      "label": "主集 · 冻结",
+      "sublabel": "上面 8 行那些集 · 改一条就是换尺子,必须显式升版本",
+      "pos": [
+        40,
+        1090
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 1,
+          "end_line": 2,
+          "label": "每集声明版本 + 内容 sha"
+        },
+        {
+          "path": "eval/runners/manifest.py",
+          "line": 1,
+          "end_line": 17,
+          "label": "sha 变而版本未升 → FAIL"
+        }
+      ]
+    },
+    {
+      "id": "p_pool",
+      "type": "database",
+      "label": "副池 · 只增",
+      "sublabel": "pool.jsonl · 加用例不会让任何数字移动",
+      "pos": [
+        40,
+        1230
+      ],
+      "size": [
+        250,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/regression/pool.jsonl",
+          "line": 1,
+          "end_line": 4,
+          "label": "钉住的 bad case"
+        },
+        {
+          "path": "eval/runners/regression.ts",
+          "line": 9,
+          "end_line": 12,
+          "label": "布尔没有分母,所以能随便长"
+        }
+      ]
+    },
+    {
+      "id": "p_num",
+      "type": "backend",
+      "label": "配对检验 → 可比数字",
+      "sublabel": "McNemar / 符号检验 + 实测噪声带 · 回答【该不该改】",
+      "pos": [
+        360,
+        1090
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/stats.py",
+          "line": 1,
+          "end_line": 15,
+          "label": "两个检验共用一份实现"
+        },
+        {
+          "path": "eval/runners/loop_intent.py",
+          "line": 14,
+          "end_line": 22,
+          "label": "为什么必须配对而不是比点估计"
+        }
+      ]
+    },
+    {
+      "id": "p_bool",
+      "type": "security",
+      "label": "布尔断言 → 否决位",
+      "sublabel": "坏一条即否决 · 没跑也算否决 · 回答【能不能改】",
+      "pos": [
+        360,
+        1230
+      ],
+      "size": [
+        300,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/regression.ts",
+          "line": 13,
+          "end_line": 22,
+          "label": "must_hold 与 documented_gap"
+        },
+        {
+          "path": "eval/runners/regression.ts",
+          "line": 78,
+          "end_line": 86,
+          "label": "写否决位并非零退出"
+        }
+      ]
+    },
+    {
+      "id": "p_obj",
+      "type": "backend",
+      "label": "objective.py 四裁决",
+      "sublabel": "先查副池否决位 —— 否决了就根本不看成本",
+      "pos": [
+        730,
+        1160
+      ],
+      "size": [
+        280,
+        96
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/objective.py",
+          "line": 109,
+          "end_line": 118,
+          "label": "副池先否决;未跑算未知"
+        },
+        {
+          "path": "eval/runners/objective.py",
+          "line": 10,
+          "end_line": 27,
+          "label": "四个裁决各自什么意思"
+        }
+      ]
+    },
+    {
+      "id": "p_out",
+      "type": "frontend",
+      "label": "采纳 / 不采纳",
+      "sublabel": "ACCEPT · REJECT · INDISTINGUISHABLE · INVALID",
+      "pos": [
+        730,
+        1380
+      ],
+      "size": [
+        280,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/objective.py",
+          "line": 196,
+          "end_line": 211,
+          "label": "四个裁决的出口"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "两种模式:各自跑真实代码,再在同一集上对照",
+      "wraps": [
+        "d6",
+        "m6",
+        "r6",
+        "d7",
+        "m7",
+        "r7",
+        "d8",
+        "m8",
+        "r8"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "该不该改 / 能不能改:主集与副池的分工",
+      "wraps": [
+        "p_main",
+        "p_pool",
+        "p_num",
+        "p_bool",
+        "p_obj",
+        "p_out"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "e1a",
+      "from": "d1",
+      "to": "m1"
+    },
+    {
+      "id": "e1b",
+      "from": "m1",
+      "to": "r1"
+    },
+    {
+      "id": "e2a",
+      "from": "d2",
+      "to": "m2"
+    },
+    {
+      "id": "e2b",
+      "from": "m2",
+      "to": "r2"
+    },
+    {
+      "id": "e3a",
+      "from": "d3",
+      "to": "m3"
+    },
+    {
+      "id": "e3b",
+      "from": "m3",
+      "to": "r3"
+    },
+    {
+      "id": "e4a",
+      "from": "d4",
+      "to": "m4"
+    },
+    {
+      "id": "e4b",
+      "from": "m4",
+      "to": "r4"
+    },
+    {
+      "id": "e5a",
+      "from": "d5",
+      "to": "m5"
+    },
+    {
+      "id": "e5b",
+      "from": "m5",
+      "to": "r5"
+    },
+    {
+      "id": "e6a",
+      "from": "d6",
+      "to": "m6"
+    },
+    {
+      "id": "e6b",
+      "from": "m6",
+      "to": "r6"
+    },
+    {
+      "id": "e7a",
+      "from": "d7",
+      "to": "m7"
+    },
+    {
+      "id": "e7b",
+      "from": "m7",
+      "to": "r7"
+    },
+    {
+      "id": "e8a",
+      "from": "d8",
+      "to": "m8"
+    },
+    {
+      "id": "e8b",
+      "from": "m8",
+      "to": "r8"
+    },
+    {
+      "id": "q1",
+      "from": "p_main",
+      "to": "p_num",
+      "variant": "emphasis"
+    },
+    {
+      "id": "q2",
+      "from": "p_num",
+      "to": "p_obj",
+      "variant": "emphasis"
+    },
+    {
+      "id": "q3",
+      "from": "p_pool",
+      "to": "p_bool",
+      "variant": "security"
+    },
+    {
+      "id": "q4",
+      "from": "p_bool",
+      "to": "p_obj",
+      "variant": "security"
+    },
+    {
+      "id": "q5",
+      "from": "p_obj",
+      "to": "p_out",
+      "variant": "emphasis"
+    },
+    {
+      "id": "q6",
+      "from": "p_out",
+      "to": "p_pool",
+      "label": "新 bad case 回流钉住",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "怎么读这张图",
+      "items": [
+        "一行 = 一个能力层。左:用什么集、gold 长什么样;中:怎么测(跑的都是真实生产代码,评测里不重新实现一遍);右:看什么指标、现在是多少",
+        "点任意节点上的源码链接可以直接跳到对应的集或 runner",
+        "右列标【硬】的是硬不变量:不许漂移一点,也不跟基线比 —— 一次违规就是失败。其余是容差指标,容差默认 1/n,实测噪声更大时用实测带"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "数字从哪来、哪些能链接",
+      "items": [
+        "意图 / 解析 / 记忆 / 端到端 / auto 五行的值取自 eval/baseline.json(已接受基线,2026-09-27),可点开",
+        "检索 / RAG / 回归池三行的值来自最近一次本地运行:eval/history/ 是 gitignored(池化结果里带机密房源 remark),所以这几个数在仓库里没有可链接的出处",
+        "集本身都在 MANIFEST 里声明了版本与内容 sha:集一变数字就不可比,所以改集必须显式升版本,否则门禁 FAIL",
+        "双模对照是 2026-10-08 在当前代码上重跑的:同一批 39 条逐例配对,auto 赢 5 例、确定性赢 2 例,McNemar p=0.45 —— 召回上这两条路径分不出高下;真正拉开差距的是参数抽取 F1(0.87 vs 0.97)"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "下半块怎么读",
+      "items": [
+        "两条链并行进 objective:上面实线是主集出的可比数字(回答【该不该改】),下面红虚线是副池出的否决位(回答【能不能改】)—— 虚线表示它不参与任何算术,只是一个开关",
+        "顺序是副池先查:否决位一亮,成本根本不被读取。“没有 token 节省买得到一次回归”必须由算裁决的那段代码强制,不能靠人记得去看",
+        "副池【没跑】也算否决:未跑的闸是未知,未知不能过闸",
+        "副池里两种断言:must_hold(现在通过,弄坏即否决)与 documented_gap(现在失败,钉住防遗忘;若开始通过报 NEWS 而不是失败)",
+        "紫色虚线是回流:被判不采纳而暴露出的新 bad case 钉进副池。入池前先证明 gold 是对的 —— 钉错的断言比不钉更糟,它会永久否决正确的改动"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,731 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "IDX 评测体系架构",
+    "locale": "zh-CN",
+    "output": ".archify/architecture-idx-eval-system-20261005-171358/idx-eval-system.html",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/lwwdsb/idx-property-ai-agent.git",
+      "provider": "github",
+      "link_mode": "web",
+      "revision": "5204ee9de46d0a7338472b89484fa88630da1dd5"
+    }
+  },
+  "components": [
+    {
+      "id": "manifest",
+      "type": "security",
+      "label": "换尺子检测器",
+      "sublabel": "manifest.py · sha 变而版本未升 → FAIL",
+      "tag": "改集=显式动作",
+      "pos": [
+        40,
+        30
+      ],
+      "size": [
+        190,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/manifest.py",
+          "line": 1,
+          "end_line": 17,
+          "label": "唯一规则:sha 变 version 未变即失败"
+        },
+        {
+          "path": "Makefile",
+          "line": 80,
+          "end_line": 81,
+          "label": "make manifest"
+        }
+      ]
+    },
+    {
+      "id": "mainsets",
+      "type": "database",
+      "label": "主集 · 冻结",
+      "sublabel": "eval/datasets · 13 集 / 583 行 · 冻结",
+      "tag": "出可比数字",
+      "pos": [
+        40,
+        215
+      ],
+      "size": [
+        190,
+        120
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/MANIFEST.json",
+          "line": 1,
+          "end_line": 2,
+          "label": "每集:声明版本 + 内容 sha + 行数"
+        },
+        {
+          "path": "eval/runners/manifest.py",
+          "line": 23,
+          "end_line": 27,
+          "label": "清单与数据集路径"
+        }
+      ]
+    },
+    {
+      "id": "pool",
+      "type": "database",
+      "label": "回归池 · 只增",
+      "sublabel": "pool.jsonl · must_hold 2 + gap 2",
+      "tag": "出布尔",
+      "pos": [
+        40,
+        760
+      ],
+      "size": [
+        190,
+        88
+      ],
+      "sources": [
+        {
+          "path": "eval/datasets/regression/pool.jsonl",
+          "line": 1,
+          "end_line": 4,
+          "label": "4 条钉住的 bad case"
+        }
+      ]
+    },
+    {
+      "id": "det",
+      "type": "backend",
+      "label": "确定性预测器",
+      "sublabel": "evalIntentParse / evalE2E · 真 orchestrate",
+      "pos": [
+        310,
+        40
+      ],
+      "size": [
+        215,
+        88
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalIntentParse.ts",
+          "line": 1,
+          "end_line": 17,
+          "label": "真实意图+解析,预测写盘"
+        },
+        {
+          "path": "eval/runners/evalE2E.ts",
+          "line": 1,
+          "end_line": 18,
+          "label": "真 orchestrate + 假发信器"
+        }
+      ]
+    },
+    {
+      "id": "auto",
+      "type": "backend",
+      "label": "auto 预测器",
+      "sublabel": "evalAgent.ts · 真 runAgent + HITL 全链",
+      "pos": [
+        310,
+        190
+      ],
+      "size": [
+        215,
+        88
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalAgent.ts",
+          "line": 1,
+          "end_line": 14,
+          "label": "真自主循环 + 安全/接地断言"
+        }
+      ]
+    },
+    {
+      "id": "both",
+      "type": "backend",
+      "label": "同集双模对照",
+      "sublabel": "evalModeRetrieval.ts · 同 44 条双模提取",
+      "tag": "唯一可直接对照",
+      "pos": [
+        310,
+        340
+      ],
+      "size": [
+        215,
+        88
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalModeRetrieval.ts",
+          "line": 1,
+          "end_line": 19,
+          "label": "两模式同集提取,TS 做真实抽取"
+        }
+      ]
+    },
+    {
+      "id": "mem",
+      "type": "backend",
+      "label": "记忆四层",
+      "sublabel": "选择 13 / 动态 15 / 效用 7 / 固化 5",
+      "pos": [
+        310,
+        490
+      ],
+      "size": [
+        215,
+        82
+      ],
+      "sources": [
+        {
+          "path": "Makefile",
+          "line": 63,
+          "end_line": 67,
+          "label": "四个记忆 runner"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 95,
+          "end_line": 104,
+          "label": "记忆硬不变量:负对照 + 幂等"
+        }
+      ]
+    },
+    {
+      "id": "retr",
+      "type": "backend",
+      "label": "检索与 RAG",
+      "sublabel": "dense / BM25 / hybrid + 精排 · nDCG@10",
+      "pos": [
+        310,
+        620
+      ],
+      "size": [
+        215,
+        82
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/eval_retrieval.py",
+          "line": 1,
+          "end_line": 8,
+          "label": "三路对照 + 分级 nDCG"
+        },
+        {
+          "path": "eval/runners/eval_rag.py",
+          "line": 1,
+          "end_line": 11,
+          "label": "命中率 + 拒答闸的数据依据"
+        }
+      ]
+    },
+    {
+      "id": "regr",
+      "type": "security",
+      "label": "回归池闸",
+      "sublabel": "regression.ts · 布尔,永不求平均",
+      "tag": "一票否决",
+      "pos": [
+        310,
+        760
+      ],
+      "size": [
+        215,
+        88
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/regression.ts",
+          "line": 1,
+          "end_line": 22,
+          "label": "主集出数字 / 副池出布尔"
+        },
+        {
+          "path": "eval/runners/regression.ts",
+          "line": 51,
+          "end_line": 66,
+          "label": "两种 kind 的判定"
+        },
+        {
+          "path": "eval/runners/regression.ts",
+          "line": 78,
+          "end_line": 86,
+          "label": "写 veto 位并非零退出"
+        }
+      ]
+    },
+    {
+      "id": "prov",
+      "type": "security",
+      "label": "运行指纹",
+      "sublabel": "provenance.py · 代码 / 参数 / 集 sha / 种子",
+      "pos": [
+        610,
+        20
+      ],
+      "size": [
+        210,
+        92
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/provenance.py",
+          "line": 1,
+          "end_line": 21,
+          "label": "两次运行凭什么可比"
+        },
+        {
+          "path": "Makefile",
+          "line": 51,
+          "end_line": 52,
+          "label": "make eval 第一步写指纹"
+        }
+      ]
+    },
+    {
+      "id": "preds",
+      "type": "database",
+      "label": "预测落盘",
+      "sublabel": "history/*.preds.jsonl · gitignored",
+      "pos": [
+        610,
+        170
+      ],
+      "size": [
+        210,
+        108
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/evalIntentParse.ts",
+          "line": 4,
+          "end_line": 8,
+          "label": "TS 只写预测,指标交 Python"
+        },
+        {
+          "path": ".gitignore",
+          "line": 116,
+          "label": "eval/history/ 不入库"
+        }
+      ]
+    },
+    {
+      "id": "scorers",
+      "type": "backend",
+      "label": "Python 评分器",
+      "sublabel": "report_*.py · 共用 eval/metrics 一份实现",
+      "pos": [
+        610,
+        350
+      ],
+      "size": [
+        210,
+        100
+      ],
+      "sources": [
+        {
+          "path": "eval/metrics/classification.py",
+          "line": 1,
+          "label": "受测的共用指标库"
+        },
+        {
+          "path": "Makefile",
+          "line": 55,
+          "end_line": 67,
+          "label": "预测器与评分器成对出现"
+        }
+      ]
+    },
+    {
+      "id": "results",
+      "type": "database",
+      "label": "结果落盘",
+      "sublabel": "history/*.metrics.json · arms/ · 否决位",
+      "pos": [
+        610,
+        510
+      ],
+      "size": [
+        210,
+        144
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/repeat_agent.py",
+          "line": 1,
+          "end_line": 16,
+          "label": "一个臂 = N 次重复,带配置 sha"
+        },
+        {
+          "path": "eval/runners/make_report.py",
+          "line": 1,
+          "end_line": 12,
+          "label": "按能力聚合 + 历史快照"
+        }
+      ]
+    },
+    {
+      "id": "loop",
+      "type": "backend",
+      "label": "调参回路",
+      "sublabel": "loop_intent / loop_retrieval · 三种拒绝",
+      "tag": "--apply 才写配置",
+      "pos": [
+        610,
+        730
+      ],
+      "size": [
+        210,
+        100
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/loop_intent.py",
+          "line": 1,
+          "end_line": 22,
+          "label": "先复现已知答案再信机制"
+        },
+        {
+          "path": "eval/runners/loop_retrieval.py",
+          "line": 1,
+          "end_line": 17,
+          "label": "共享旋钮:一路变好不得让另一路变差"
+        },
+        {
+          "path": "eval/runners/stats.py",
+          "line": 1,
+          "end_line": 5,
+          "label": "精确检验只有一份实现"
+        }
+      ]
+    },
+    {
+      "id": "baseline",
+      "type": "database",
+      "label": "已接受基线 + 噪声带",
+      "sublabel": "baseline.json · variance.json(6 次重复)",
+      "pos": [
+        905,
+        40
+      ],
+      "size": [
+        210,
+        92
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/gate.py",
+          "line": 60,
+          "end_line": 66,
+          "label": "容差=实测带,否则 1/n"
+        },
+        {
+          "path": "eval/variance.json",
+          "line": 1,
+          "end_line": 8,
+          "label": "实测离散度与最小可检测差"
+        }
+      ]
+    },
+    {
+      "id": "gate",
+      "type": "security",
+      "label": "门禁 gate.py",
+      "sublabel": "硬不变量 6 + 容差 14 · 陈旧即缺失",
+      "tag": "退出码",
+      "pos": [
+        905,
+        200
+      ],
+      "size": [
+        210,
+        110
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/gate.py",
+          "line": 1,
+          "end_line": 30,
+          "label": "两类规则:硬不变量 vs 容差"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 67,
+          "end_line": 104,
+          "label": "受闸的 14 个指标 + 6 条不变量"
+        },
+        {
+          "path": "eval/runners/gate.py",
+          "line": 115,
+          "end_line": 133,
+          "label": "陈旧指标文件视为缺失"
+        }
+      ]
+    },
+    {
+      "id": "obj",
+      "type": "security",
+      "label": "成本目标 objective.py",
+      "sublabel": "四裁决 · 配对检验 + 噪声带两项都过",
+      "tag": "副池先否决",
+      "pos": [
+        905,
+        380
+      ],
+      "size": [
+        210,
+        110
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/objective.py",
+          "line": 1,
+          "end_line": 37,
+          "label": "质量当约束,成本当目标"
+        },
+        {
+          "path": "eval/runners/objective.py",
+          "line": 109,
+          "end_line": 127,
+          "label": "副池先否决;未跑=未知,不算通过"
+        },
+        {
+          "path": "eval/runners/objective.py",
+          "line": 196,
+          "end_line": 211,
+          "label": "四个裁决的出口"
+        }
+      ]
+    },
+    {
+      "id": "report",
+      "type": "frontend",
+      "label": "eval/report.md",
+      "sublabel": "make_report.py · 带运行指纹",
+      "pos": [
+        905,
+        560
+      ],
+      "size": [
+        210,
+        86
+      ],
+      "sources": [
+        {
+          "path": "eval/runners/make_report.py",
+          "line": 20,
+          "end_line": 30,
+          "label": "陈旧 schema 当缺失并点名"
+        }
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "预测层:跑真实生产代码,绝不重新实现",
+      "wraps": [
+        "det",
+        "auto",
+        "both",
+        "mem",
+        "retr"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "副池通道:布尔 · 永不求平均 · 可随便长",
+      "wraps": [
+        "pool",
+        "regr"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "裁决层",
+      "wraps": [
+        "gate",
+        "obj"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "k-manifest",
+      "from": "manifest",
+      "to": "mainsets",
+      "label": "比对 sha",
+      "variant": "security"
+    },
+    {
+      "id": "k-det",
+      "from": "mainsets",
+      "to": "det"
+    },
+    {
+      "id": "k-auto",
+      "from": "mainsets",
+      "to": "auto"
+    },
+    {
+      "id": "k-both",
+      "from": "mainsets",
+      "to": "both"
+    },
+    {
+      "id": "k-mem",
+      "from": "mainsets",
+      "to": "mem"
+    },
+    {
+      "id": "k-retr",
+      "from": "mainsets",
+      "to": "retr"
+    },
+    {
+      "id": "k-detp",
+      "from": "det",
+      "to": "preds"
+    },
+    {
+      "id": "k-autop",
+      "from": "auto",
+      "to": "preds"
+    },
+    {
+      "id": "k-bothp",
+      "from": "both",
+      "to": "preds"
+    },
+    {
+      "id": "k-memr",
+      "from": "mem",
+      "to": "results",
+      "label": "直出指标"
+    },
+    {
+      "id": "k-retrr",
+      "from": "retr",
+      "to": "results",
+      "label": "直出指标"
+    },
+    {
+      "id": "k-poolregr",
+      "from": "pool",
+      "to": "regr",
+      "label": "4 条断言",
+      "variant": "security"
+    },
+    {
+      "id": "k-regrr",
+      "from": "regr",
+      "to": "results",
+      "label": "布尔结果",
+      "variant": "security"
+    },
+    {
+      "id": "k-ps",
+      "from": "preds",
+      "to": "scorers",
+      "label": "读预测",
+      "variant": "emphasis"
+    },
+    {
+      "id": "k-sr",
+      "from": "scorers",
+      "to": "results",
+      "label": "回写",
+      "variant": "emphasis"
+    },
+    {
+      "id": "k-rg",
+      "from": "results",
+      "to": "gate",
+      "label": "读指标",
+      "variant": "emphasis"
+    },
+    {
+      "id": "k-ro",
+      "from": "results",
+      "to": "obj",
+      "label": "读臂"
+    },
+    {
+      "id": "k-rrep",
+      "from": "results",
+      "to": "report",
+      "label": "渲染",
+      "variant": "dashed"
+    },
+    {
+      "id": "k-rl",
+      "from": "results",
+      "to": "loop",
+      "label": "冻结预测",
+      "variant": "dashed"
+    },
+    {
+      "id": "k-pg",
+      "from": "prov",
+      "to": "gate",
+      "label": "指纹核对",
+      "variant": "security"
+    },
+    {
+      "id": "k-bg",
+      "from": "baseline",
+      "to": "gate",
+      "label": "基线",
+      "variant": "security"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "两种模式,一把尺子",
+      "items": [
+        "确定性侧跑真 orchestrate(e2e 25 条);auto 侧跑真 runAgent(agent 21 条),断言工具组合、挂起审批、步数预算、HITL 全链(挂起→批准/取消→恢复)与接地核查(回复里的 MLS# 必须出现在某次工具观测里)",
+        "evalModeRetrieval 让两侧在同一 44 条上各自提取 filter 与真实送检文本 —— 这是唯一能直接对照两种模式的集",
+        "TS 做真实抽取、只写预测;Python 算分:指标只有一份实现(eval/metrics),两侧与两语言都不会漂移",
+        "检索侧另有拒答阈值:用集外问题的相似度分离度,把“该加硬阈值”从意见变成一个数"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "为什么要主集 / 副池两池",
+      "items": [
+        "主集必须【冻结】才有可比的平均值:agent 集 14→21 让成本基线 6049→6449,并作废了已测的两个臂与整条噪声带",
+        "memory_select 10→13 让 recall 0.792→0.697,看着退化 0.095 而实际什么都没退化",
+        "副池只出布尔、永不求平均,所以加用例不会让任何数字移动 —— 这正是它能随便长的原因",
+        "两种 kind:must_hold(现在通过,弄坏即否决)与 documented_gap(现在失败,钉住防遗忘;若开始通过则报 NEWS 而非失败)",
+        "入池门槛是先证明 gold 是对的:钉错的断言比不钉更糟,它会永久否决正确的改动"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "判定不是比大小",
+      "items": [
+        "容差默认 1/n(一条样本能移动的最小量);实测噪声更大时用实测带,如记忆选择 recall 0.21 来自 5 次重复",
+        "成本当目标、质量当约束:auto 的 pass_rate 一直是满分,饱和的指标排不了序,所以目标放在成本上",
+        "objective 要配对符号检验与超过噪声带【两项都过】才 ACCEPT;质量约束一破,成本根本不被查看",
+        "INVALID 专门留给 A/A 却测出效应的情形 —— 本项目测过 4 次不存在的路径,三答案的规则会把它们记成结果"
+      ]
+    },
+    {
+      "dot": "slate",
+      "title": "拦住自欺的四道机关",
+      "items": [
+        "换尺子:集的内容 sha 变了而声明 version 没 bump → 门禁 FAIL",
+        "运行指纹:每次 make eval 先记代码 commit、参数 sha、各集 sha、种子、能力位(只记存在性,不记值)",
+        "陈旧结果:指标文件比本次指纹旧 → 当缺失处理,而不是拿几个月前的数字报 PASS",
+        "未跑的否决:副池没有结果时 objective 当未知否决,不当通过",
+        "判官可信度另走一路:LLM 判官与交叉编码器双判官,只把最不一致的对交 30 行人工,人工只做校准不做优化目标"
+      ]
+    }
+  ]
+}

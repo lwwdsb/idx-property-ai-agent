@@ -20,7 +20,7 @@
       "label": "LLM",
       "sublabel": "生成类任务 · 工具调用",
       "pos": [
-        40,
+        320,
         150
       ],
       "size": [
@@ -121,7 +121,7 @@
       "id": "orchestrate",
       "type": "backend",
       "label": "编排器",
-      "sublabel": "审批命令先拦 · 低置信度先澄清",
+      "sublabel": "控制流由代码固定 · 审批命令先拦截",
       "pos": [
         600,
         390
@@ -133,24 +133,23 @@
       "sources": [
         {
           "path": "src/orchestrator/orchestrate.ts",
-          "line": 48,
-          "end_line": 53,
-          "label": "审批命令绝不经 LLM"
+          "line": 49,
+          "end_line": 52,
+          "label": "审批命令先于一切拦截"
         },
         {
           "path": "src/orchestrator/orchestrate.ts",
-          "line": 80,
-          "end_line": 85,
-          "label": "低置信度澄清,域外不可救回"
+          "line": 58,
+          "end_line": 61,
+          "label": "再调意图判定"
         },
         {
           "path": "src/orchestrator/orchestrate.ts",
           "line": 94,
-          "end_line": 104,
-          "label": "多意图规划/单意图直调"
+          "end_line": 101,
+          "label": "单任务直调/多任务规划"
         }
-      ],
-      "tag": "控制流由代码固定"
+      ]
     },
     {
       "id": "consolidation",
@@ -516,11 +515,11 @@
       "label": "MCP 服务端",
       "sublabel": "stdio · 薄转发层",
       "pos": [
-        240,
+        40,
         150
       ],
       "size": [
-        115,
+        130,
         62
       ],
       "sources": [
@@ -544,11 +543,11 @@
       "label": "边界闸 :8100",
       "sublabel": "仅绑 127.0.0.1 · 令牌核验",
       "pos": [
-        450,
+        600,
         150
       ],
       "size": [
-        180,
+        185,
         66
       ],
       "tag": "20 次/分 · 幂等 · 两种模式",
@@ -599,7 +598,7 @@
     },
     {
       "kind": "region",
-      "label": "编排器内部:拦审批 → 判意图 → 澄清闸 → 路由",
+      "label": "编排器内部:先拦审批命令,再判意图",
       "wraps": [
         "orchestrate",
         "intent"
@@ -643,7 +642,7 @@
     },
     {
       "id": "orchestrate-uses-llm",
-      "from": "orchestrate",
+      "from": "intent",
       "to": "llm",
       "label": "拆子查询",
       "variant": "dashed"
@@ -801,7 +800,6 @@
       "title": "两条路径的区别:控制流归谁",
       "items": [
         "编排模式:控制流写死在代码里,单任务直接调技能",
-        "编排器在判意图【之前】先拦审批命令,之后再过低置信度澄清闸",
         "多任务由受约束规划拆成子查询,再按计划执行",
         "自主模式:LLM 在循环中自选工具,边界由代码守住",
         "多轮靠会话槽位跨轮携带,删掉事实层后它是唯一跨轮状态"

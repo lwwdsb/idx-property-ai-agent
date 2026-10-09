@@ -1,204 +1,185 @@
 {
-  "__doc__": "实测噪声基线。每个条目 = 同一配置连跑 N 次的离散度。mde_* = 两组各 N 次比较时的最小可检测差值(2×SE_diff)，小于它的差异不能当成效应。改配置或改 prompt 后必须重测。",
-  "measured_at": "2026-09-28",
-  "commit": "a154f85",
-  "tuning_sha": "55cdec9346fb",
-  "n_runs": 6,
-  "auto_agent": {
-    "__set__": "agent.jsonl 21 条(20 真实 + 1 已知缺口 a-017)/ 23 段 drive,llm=live",
-    "quality": {
-      "pass_rate": {
-        "min": 1.0,
-        "max": 1.0,
-        "mean": 1.0,
-        "stdev": 0.0,
-        "cv_pct": 0.0,
-        "mde_abs": 0.0,
-        "mde_pct": 0.0,
-        "values": [
-          1.0,
-          1.0,
-          1.0,
-          1.0,
-          1.0,
-          1.0
-        ]
-      },
-      "completion_mean": {
-        "min": 1.86,
-        "max": 1.95,
-        "mean": 1.90167,
-        "stdev": 0.02609,
-        "cv_pct": 1.37,
-        "mde_abs": 0.03012,
-        "mde_pct": 1.58,
-        "values": [
-          1.9,
-          1.9,
-          1.9,
-          1.95,
-          1.86,
-          1.9
-        ]
-      }
-    },
-    "cost": {
-      "tokens_total": {
-        "min": 133940,
-        "max": 137930,
-        "mean": 135728.0,
-        "stdev": 1669.0,
-        "cv_pct": 1.23,
-        "mde_abs": 1927.0,
-        "mde_pct": 1.42,
-        "values": [
-          134189,
-          134174,
-          137930,
-          133940,
-          136685,
-          137452
-        ]
-      },
-      "tokens_per_task_mean": {
-        "min": 6378.1,
-        "max": 6568.1,
-        "mean": 6463.25,
-        "stdev": 79.48,
-        "cv_pct": 1.23,
-        "mde_abs": 91.77,
-        "mde_pct": 1.42,
-        "values": [
-          6390.0,
-          6389.2,
-          6568.1,
-          6378.1,
-          6508.8,
-          6545.3
-        ]
-      },
-      "tokens_per_task_p50": {
-        "min": 5701,
-        "max": 5899,
-        "mean": 5811.5,
-        "stdev": 82.46,
-        "cv_pct": 1.42,
-        "mde_abs": 95.21,
-        "mde_pct": 1.64,
-        "values": [
-          5899,
-          5836,
-          5899,
-          5701,
-          5701,
-          5833
-        ]
-      },
-      "tokens_per_task_max": {
-        "min": 12780,
-        "max": 15665,
-        "mean": 13354.5,
-        "stdev": 1035.0,
-        "cv_pct": 7.75,
-        "mde_abs": 1195.0,
-        "mde_pct": 8.95,
-        "values": [
-          12780,
-          12982,
-          12895,
-          12910,
-          15665,
-          12895
-        ]
-      },
-      "llm_calls_total": {
-        "min": 49,
-        "max": 50,
-        "mean": 49.5,
-        "stdev": 0.5,
-        "cv_pct": 1.01,
-        "mde_abs": 0.5774,
-        "mde_pct": 1.17,
-        "values": [
-          49,
-          49,
-          50,
-          49,
-          50,
-          50
-        ]
-      },
-      "steps_total": {
-        "min": 53,
-        "max": 54,
-        "mean": 53.5,
-        "stdev": 0.5,
-        "cv_pct": 0.935,
-        "mde_abs": 0.5774,
-        "mde_pct": 1.08,
-        "values": [
-          53,
-          53,
-          54,
-          53,
-          54,
-          54
-        ]
-      }
-    },
-    "latency": {
-      "p50_ms": {
-        "min": 3124,
-        "max": 3750,
-        "mean": 3480.33,
-        "stdev": 226.3,
-        "cv_pct": 6.5,
-        "mde_abs": 261.3,
-        "mde_pct": 7.51,
-        "values": [
-          3286,
-          3616,
-          3124,
-          3750,
-          3410,
-          3696
-        ]
-      },
-      "p99_ms": {
-        "min": 7661,
-        "max": 13531,
-        "mean": 11882.3,
-        "stdev": 1934.0,
-        "cv_pct": 16.3,
-        "mde_abs": 2233.0,
-        "mde_pct": 18.8,
-        "values": [
-          12537,
-          13531,
-          12287,
-          12933,
-          7661,
-          12345
-        ]
-      }
-    }
+ "__doc__": "实测噪声基线。每个条目 = 同一配置连跑 N 次的离散度。mde_* = 两组各 N 次比较时的最小可检测差值(2×SE_diff)，小于它的差异不能当成效应。改配置或改 prompt 后必须重测。\n\n2026-10-08:agent 集 21→26(v4)之后重测。本次只有 4 次有效运行 —— 第 5、6 次被 DeepSeek 余额耗尽(HTTP 402 Insufficient Balance)打断,已由 variance.py 自动剔除并点名。n=4 的带比 n=6 宽,充值后应当重跑到 n=6 再更新。",
+ "measured_at": "2026-10-08",
+ "commit": "a154f85",
+ "tuning_sha": "f9d971d92117",
+ "n_runs": 4,
+ "auto_agent": {
+  "__set__": "agent.jsonl 25 条 / 28 段 drive,llm=live",
+  "quality": {
+   "pass_rate": {
+    "min": 1.0,
+    "max": 1.0,
+    "mean": 1.0,
+    "stdev": 0.0,
+    "cv_pct": 0.0,
+    "mde_abs": 0.0,
+    "mde_pct": 0.0,
+    "values": [
+     1.0,
+     1.0,
+     1.0,
+     1.0
+    ]
+   },
+   "completion_mean": {
+    "min": 1.77,
+    "max": 1.81,
+    "mean": 1.78,
+    "stdev": 0.02,
+    "cv_pct": 1.12,
+    "mde_abs": 0.02828,
+    "mde_pct": 1.59,
+    "values": [
+     1.81,
+     1.77,
+     1.77,
+     1.77
+    ]
+   }
   },
-  "memory_select": {
-    "__set__": "memory_select.jsonl 10 条 / 18 gold 项。两个 prompt 版本各跑 5 次:当前版本逐位相同，上一版本在摆。",
-    "__note__": "因此噪声是 prompt 的属性而非只是集的属性，换 prompt 必须重测。门禁容差取两版里更宽的那个。",
-    "precision": {
-      "gate_tolerance": 0.1,
-      "prev_prompt_min": 0.8,
-      "prev_prompt_max": 0.9,
-      "current_prompt": "bit-identical x5"
-    },
-    "recall": {
-      "gate_tolerance": 0.21,
-      "prev_prompt_min": 0.604,
-      "prev_prompt_max": 0.812,
-      "current_prompt": "bit-identical x5"
-    }
+  "cost": {
+   "tokens_total": {
+    "min": 229147,
+    "max": 251175,
+    "mean": 243255.0,
+    "stdev": 10250.0,
+    "cv_pct": 4.22,
+    "mde_abs": 14500.0,
+    "mde_pct": 5.96,
+    "values": [
+     251175,
+     242194,
+     250505,
+     229147
+    ]
+   },
+   "tokens_per_task_mean": {
+    "min": 8813.3,
+    "max": 9660.6,
+    "mean": 9355.98,
+    "stdev": 394.4,
+    "cv_pct": 4.22,
+    "mde_abs": 557.8,
+    "mde_pct": 5.96,
+    "values": [
+     9660.6,
+     9315.2,
+     9634.8,
+     8813.3
+    ]
+   },
+   "tokens_per_task_p50": {
+    "min": 7079,
+    "max": 8728,
+    "mean": 8281.5,
+    "stdev": 802.5,
+    "cv_pct": 9.69,
+    "mde_abs": 1135.0,
+    "mde_pct": 13.7,
+    "values": [
+     7079,
+     8728,
+     8638,
+     8681
+    ]
+   },
+   "tokens_per_task_max": {
+    "min": 21597,
+    "max": 30666,
+    "mean": 26836.2,
+    "stdev": 3791.0,
+    "cv_pct": 14.13,
+    "mde_abs": 5361.0,
+    "mde_pct": 19.98,
+    "values": [
+     30666,
+     27503,
+     27579,
+     21597
+    ]
+   },
+   "llm_calls_total": {
+    "min": 70,
+    "max": 74,
+    "mean": 72.5,
+    "stdev": 1.915,
+    "cv_pct": 2.64,
+    "mde_abs": 2.708,
+    "mde_pct": 3.74,
+    "values": [
+     74,
+     72,
+     74,
+     70
+    ]
+   },
+   "steps_total": {
+    "min": 74,
+    "max": 78,
+    "mean": 76.5,
+    "stdev": 1.915,
+    "cv_pct": 2.5,
+    "mde_abs": 2.708,
+    "mde_pct": 3.54,
+    "values": [
+     78,
+     76,
+     78,
+     74
+    ]
+   }
   },
-  "__stale_note__": "auto_agent 的带在 2026-09-28 于【21 条】的 agent.jsonl 上重测。之前那版是在 14 条集上测的,任务集一变带就不可比 —— 旧的两个 A/A 臂因此被删除而不是留着对比。",
-  "__precision_note__": "mde_abs/stdev 按【有效数字】而不是小数位取整。原来用 round(x,1),把 completion.mean 的带存成了 0.0(真实 MDE≈0.031),于是容差规则退化成'一点都不许掉',会在正常噪声上误 REJECT。本表指标跨 0.03 到 137000 五个数量级,按小数位取整必然在小端失真。"
+  "latency": {
+   "p50_ms": {
+    "min": 4116,
+    "max": 4557,
+    "mean": 4340.25,
+    "stdev": 221.1,
+    "cv_pct": 5.09,
+    "mde_abs": 312.6,
+    "mde_pct": 7.2,
+    "values": [
+     4501,
+     4187,
+     4116,
+     4557
+    ]
+   },
+   "p99_ms": {
+    "min": 9830,
+    "max": 10610,
+    "mean": 10199,
+    "stdev": 398.0,
+    "cv_pct": 3.9,
+    "mde_abs": 562.9,
+    "mde_pct": 5.52,
+    "values": [
+     10610,
+     10469,
+     9887,
+     9830
+    ]
+   }
+  }
+ },
+ "memory_select": {
+  "__set__": "memory_select.jsonl 10 条 / 18 gold 项。两个 prompt 版本各跑 5 次:当前版本逐位相同，上一版本在摆。",
+  "__note__": "因此噪声是 prompt 的属性而非只是集的属性，换 prompt 必须重测。门禁容差取两版里更宽的那个。",
+  "precision": {
+   "gate_tolerance": 0.1,
+   "prev_prompt_min": 0.8,
+   "prev_prompt_max": 0.9,
+   "current_prompt": "bit-identical x5"
+  },
+  "recall": {
+   "gate_tolerance": 0.21,
+   "prev_prompt_min": 0.604,
+   "prev_prompt_max": 0.812,
+   "current_prompt": "bit-identical x5"
+  }
+ },
+ "__stale_note__": "auto_agent 的带在 2026-09-28 于【21 条】的 agent.jsonl 上重测。之前那版是在 14 条集上测的,任务集一变带就不可比 —— 旧的两个 A/A 臂因此被删除而不是留着对比。",
+ "__precision_note__": "mde_abs/stdev 按【有效数字】而不是小数位取整。原来用 round(x,1),把 completion.mean 的带存成了 0.0(真实 MDE≈0.031),于是容差规则退化成'一点都不许掉',会在正常噪声上误 REJECT。本表指标跨 0.03 到 137000 五个数量级,按小数位取整必然在小端失真。",
+ "__n_caveat__": "n=4(计划 6,两次被 402 打断)。MDE 随 n 缩小,所以拿这条带去判一个 n=6 的比较是偏保守的 —— 可以安全地用,但它会低估你的分辨力。"
 }

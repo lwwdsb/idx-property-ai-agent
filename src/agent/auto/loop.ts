@@ -60,6 +60,10 @@ export interface AgentMetrics {
   promptTokens: number;
   completionTokens: number;
   totalTokens: number;
+  /** 前缀缓存命中/未命中。promptTokens 在缓存生效后不再代表真实成本 —— 同样的
+   * token 数可能差数倍价钱。分开记,否则成本指标会和它要衡量的东西悄悄脱钩。 */
+  cacheHitTokens: number;
+  cacheMissTokens: number;
   groundingRewrites: number;   // grounding gate LLM-rewrite passes
   groundingStripped: number;   // grounding gate deterministic strips (rewrite couldn't fix)
   budgetExhausted: boolean;
@@ -123,7 +127,8 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
   const t0 = Date.now();
   // Cost baseline for THIS drive. A delta of two snapshots, not a reset, because the client is
   // shared process-wide — a reset here would zero another caller's accounting.
-  const u0 = llm.usage?.() ?? { calls: 0, prompt: 0, completion: 0, total: 0 };
+  const u0 = llm.usage?.() ?? { calls: 0, prompt: 0, completion: 0, total: 0,
+                              cacheHit: 0, cacheMiss: 0, cacheReported: false };
   const withMemory = (): ChatMessage[] =>
     isEmpty(mem) ? messages : [...messages, { role: 'system', content: renderMemory(mem) }];
   const M = (extra: Partial<AgentMetrics> = {}): AgentMetrics => {
@@ -133,6 +138,8 @@ async function driveLoop(state: AgentRunState, deps: DriveDeps): Promise<AgentRe
       promptTokens: u.prompt - u0.prompt,
       completionTokens: u.completion - u0.completion,
       totalTokens: u.total - u0.total,
+      cacheHitTokens: u.cacheHit - u0.cacheHit,
+      cacheMissTokens: u.cacheMiss - u0.cacheMiss,
       groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false,
       elapsedMs: Date.now() - t0, ...extra,
     };
@@ -291,7 +298,7 @@ export async function resumeAgentRun(runId: number, opts: ResumeAgentOptions): P
     return { reply: `Run #${runId} is not awaiting approval (status: ${run.status}).`,
       trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId,
       metrics: { steps: run.state.step, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
-        promptTokens: 0, completionTokens: 0, totalTokens: 0,
+        promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0,
         groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, elapsedMs: 0 } };
   }
   const state = run.state;
@@ -329,7 +336,7 @@ export async function retryAgentRun(runId: number, opts: RetryAgentOptions): Pro
     return { reply: `Run #${runId} is not interrupted (status: ${run.status}); nothing to retry.`,
       trace: [], steps: run.state.step, stopReason: 'final', memory: run.state.memory, runId,
       metrics: { steps: run.state.step, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
-        promptTokens: 0, completionTokens: 0, totalTokens: 0,
+        promptTokens: 0, completionTokens: 0, totalTokens: 0, cacheHitTokens: 0, cacheMissTokens: 0,
         groundingRewrites: 0, groundingStripped: 0, budgetExhausted: false, suspended: false, elapsedMs: 0 } };
   }
   await store.save(runId, { status: 'running' });

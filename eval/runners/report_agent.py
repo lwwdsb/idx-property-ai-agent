@@ -98,6 +98,14 @@ def main():
             "tokens_total": sum(c["totalTokens"] for c in costs),
             "tokens_prompt_total": sum(c["promptTokens"] for c in costs),
             "tokens_completion_total": sum(c["completionTokens"] for c in costs),
+            # 前缀缓存:命中的 prompt token 按远低的价计费,所以 tokens_prompt_total 在缓存
+            # 生效后【不再代表真实成本】。分开记,并算出命中率 —— 否则一次缓存上线会让成本
+            # 指标和它要衡量的东西静默脱钩:同样的 token 数,账单差数倍。
+            "cache_hit_tokens": sum(c.get("cacheHitTokens", 0) for c in costs),
+            "cache_miss_tokens": sum(c.get("cacheMissTokens", 0) for c in costs),
+            "cache_hit_rate": (
+                round(sum(c.get("cacheHitTokens", 0) for c in costs)
+                      / max(1, sum(c["promptTokens"] for c in costs)), 4)),
             "tokens_per_task_mean": round(sum(c["totalTokens"] for c in costs) / n_c, 1),
             "tokens_per_task_p50": cpct(50), "tokens_per_task_max": tot[-1] if tot else 0,
             "llm_calls_total": sum(c["llmCalls"] for c in costs),
@@ -110,6 +118,8 @@ def main():
             # tasks appear in both arms, so the only thing left varying is the config.
             "per_task": {p["id"]: p["cost"]["totalTokens"] for p in preds if p.get("cost")},
             "per_task_calls": {p["id"]: p["cost"]["llmCalls"] for p in preds if p.get("cost")},
+            "per_task_cache_hit": {p["id"]: p["cost"].get("cacheHitTokens", 0)
+                                   for p in preds if p.get("cost")},
         }
 
     self_sent = meta.get("selfSentTotal")
@@ -153,6 +163,13 @@ def main():
               f"({cost_block['tokens_per_task_mean']}/task, p50 {cost_block['tokens_per_task_p50']}, "
               f"max {cost_block['tokens_per_task_max']}); {cost_block['llm_calls_total']} LLM calls"
               + ("" if cost_block["usage_reported"] else "  ⚠️ provider reported NO usage — tokens unmeasured"))
+        hit, miss = cost_block["cache_hit_tokens"], cost_block["cache_miss_tokens"]
+        if hit or miss:
+            print(f"  PROMPT CACHE: {hit} hit / {miss} miss "
+                  f"({100 * cost_block['cache_hit_rate']:.1f}% of prompt tokens cached)"
+                  + ("" if hit else "  ⚠️ 0 命中 —— 前缀没稳住,或供应商没启用"))
+        else:
+            print("  PROMPT CACHE: provider reported no cache fields — hit/miss unknown")
     print(f"  TRAJECTORY: mean {mean_steps} steps/task; "
           + ("possible detours: " + ", ".join(detours) if detours else "no detours (steps ≈ distinct tools)"))
     if runtime:

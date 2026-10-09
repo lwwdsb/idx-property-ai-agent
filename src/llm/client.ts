@@ -42,7 +42,18 @@ export interface ChatTurn { content: string; toolCalls: ToolCall[]; raw: ChatMes
  * attempt that came back with a usage block is counted, because that is what the bill counts.
  * An attempt that timed out returns no usage and is therefore invisible here — so `calls` is
  * "responses parsed", not "requests sent", and it can be lower than the attempts made. */
-export interface TokenUsage { calls: number; prompt: number; completion: number; total: number; }
+export interface TokenUsage {
+  calls: number; prompt: number; completion: number; total: number;
+  /** Prefix-cache accounting. DeepSeek splits prompt_tokens into hit/miss and bills them at
+   * very different rates, so prompt_tokens alone stops tracking real cost the moment caching
+   * engages: the same token count can mean a 5x difference in spend. Recorded separately for
+   * the same reason the eval keeps dataset shas — a metric that silently stops measuring what
+   * it names is worse than a missing one.
+   *
+   * Zero on providers that do not report it; `cacheReported` says whether ANY response carried
+   * the fields, so "caching is off" is distinguishable from "this provider does not say". */
+  cacheHit: number; cacheMiss: number; cacheReported: boolean;
+}
 
 export interface LLMClient {
   readonly available: boolean;
@@ -149,7 +160,8 @@ export function getLLMClient(): LLMClient {
   // after sees the cost of EVERYTHING it triggered, including the LLM calls made underneath it
   // by other layers (memory selection, the grounding gate). That is the number that matters for
   // a cost objective; attributing tokens to a single layer would undercount the run.
-  const spend: TokenUsage = { calls: 0, prompt: 0, completion: 0, total: 0 };
+  const spend: TokenUsage = { calls: 0, prompt: 0, completion: 0, total: 0,
+                              cacheHit: 0, cacheMiss: 0, cacheReported: false };
   function record(data: unknown): void {
     const u = (data as { usage?: Record<string, unknown> } | null)?.usage;
     if (!u) return;
@@ -159,6 +171,21 @@ export function getLLMClient(): LLMClient {
     spend.completion += n('completion_tokens');
     // total_tokens is what the provider bills; fall back to the sum when it is absent.
     spend.total += n('total_tokens') || (n('prompt_tokens') + n('completion_tokens'));
+    // Two spellings in the wild: DeepSeek's top-level prompt_cache_hit_tokens, and the
+    // OpenAI-style usage.prompt_tokens_details.cached_tokens. Read both; prefer the explicit
+    // hit/miss pair because it also tells us the miss count rather than making us derive it.
+    const details = u['prompt_tokens_details'] as Record<string, unknown> | undefined;
+    const cachedAlt = typeof details?.['cached_tokens'] === 'number' ? details['cached_tokens'] as number : null;
+    const hasPair = typeof u['prompt_cache_hit_tokens'] === 'number';
+    if (hasPair) {
+      spend.cacheReported = true;
+      spend.cacheHit += n('prompt_cache_hit_tokens');
+      spend.cacheMiss += n('prompt_cache_miss_tokens');
+    } else if (cachedAlt !== null) {
+      spend.cacheReported = true;
+      spend.cacheHit += cachedAlt;
+      spend.cacheMiss += Math.max(0, n('prompt_tokens') - cachedAlt);
+    }
   }
 
   async function chatJSON(system: string, user: string): Promise<unknown> {

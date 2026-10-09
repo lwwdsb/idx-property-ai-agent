@@ -123,7 +123,8 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
     // after approval) and the resume spends real tokens, so recording only r1.metrics would
     // undercount exactly the tasks that cost the most. Summed here; the booleans take r1's.
     let cost = { steps: 0, toolCalls: 0, toolErrors: 0, loopGuards: 0, llmCalls: 0,
-      promptTokens: 0, completionTokens: 0, totalTokens: 0, elapsedMs: 0, drives: 0 };
+      promptTokens: 0, completionTokens: 0, totalTokens: 0,
+      cacheHitTokens: 0, cacheMissTokens: 0, elapsedMs: 0, drives: 0 };
     const addCost = (m: AgentResult['metrics'] | undefined): void => {
       if (!m) return;
       cost = { steps: cost.steps + m.steps, toolCalls: cost.toolCalls + m.toolCalls,
@@ -131,6 +132,8 @@ async function judgeCompletion(llm: any, task: string, reply: string): Promise<{
         llmCalls: cost.llmCalls + m.llmCalls, promptTokens: cost.promptTokens + m.promptTokens,
         completionTokens: cost.completionTokens + m.completionTokens,
         totalTokens: cost.totalTokens + m.totalTokens,
+        cacheHitTokens: cost.cacheHitTokens + (m.cacheHitTokens ?? 0),
+        cacheMissTokens: cost.cacheMissTokens + (m.cacheMissTokens ?? 0),
         elapsedMs: cost.elapsedMs + m.elapsedMs, drives: cost.drives + 1 };
     };
     let res = { toolsUsed: [] as string[], stopReason: 'error', steps: 0, reply: '',
